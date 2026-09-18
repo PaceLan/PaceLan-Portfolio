@@ -1,0 +1,77 @@
+﻿"""Immutable workflow plan definitions and deterministic plan execution."""
+
+from dataclasses import dataclass
+from typing import Callable, Tuple
+
+from agent_workflow.execution_tracker import ExecutionTracker
+from agent_workflow.workflow_core import (
+    AgentWorkflow,
+    WorkflowStepResult,
+    WorkflowTask,
+)
+from permissions.reporting import ApprovalStatus, RiskLevel
+
+
+@dataclass(frozen=True)
+class WorkflowStep:
+    """Immutable description of one workflow action."""
+
+    operation: str
+    action: Callable[[], str]
+    risk: RiskLevel = RiskLevel.SAFE
+    approval: ApprovalStatus = ApprovalStatus.NOT_REQUESTED
+    target: str = "."
+    context: str | None = None
+
+
+@dataclass(frozen=True)
+class WorkflowPlan:
+    """Immutable workflow task and ordered execution steps."""
+
+    task: WorkflowTask
+    steps: Tuple[WorkflowStep, ...] = ()
+
+
+def run_plan(
+    workflow: AgentWorkflow,
+    plan: WorkflowPlan,
+    tracker: ExecutionTracker,
+) -> tuple[WorkflowStepResult, ...]:
+    """Execute a plan sequentially while synchronizing execution state."""
+
+    try:
+        workflow.task_status(plan.task.task_id)
+    except KeyError:
+        workflow.start_task(plan.task)
+
+    results: list[WorkflowStepResult] = []
+
+    for index, step in enumerate(plan.steps):
+        tracker.start_step(step.operation)
+
+        result = workflow.run_step(
+            plan.task,
+            step.operation,
+            step.action,
+            risk=step.risk,
+            approval=step.approval,
+            target=step.target,
+            context=step.context,
+        )
+        results.append(result)
+
+        if result.success:
+            tracker.complete_step(step.operation)
+            continue
+
+        tracker.fail_step(step.operation)
+
+        for remaining_step in plan.steps[index + 1:]:
+            tracker.skip_step(remaining_step.operation)
+
+        tracker.fail_run()
+        break
+    else:
+        tracker.complete_run()
+
+    return tuple(results)
