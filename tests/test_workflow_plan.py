@@ -54,7 +54,7 @@ class WorkflowPlanTests(unittest.TestCase):
         context = WorkflowRunContext.create(plan.task)
         tracker = ExecutionTracker(
             context,
-            tuple(step.operation for step in plan.steps),
+            tuple(step.step_id for step in plan.steps),
         )
         tracker.start_run()
         return tracker
@@ -68,10 +68,12 @@ class WorkflowPlanTests(unittest.TestCase):
                 WorkflowStep(
                     "step one",
                     lambda: executed.append("one") or "one complete",
+                    step_id="step-001",
                 ),
                 WorkflowStep(
                     "step two",
                     lambda: executed.append("two") or "two complete",
+                    step_id="step-002",
                 ),
             ),
         )
@@ -92,10 +94,7 @@ class WorkflowPlanTests(unittest.TestCase):
             self.workflow.task_status(self.task.task_id),
             WorkflowStatus.COMPLETED,
         )
-        self.assertEqual(
-            tracker.run_status.value,
-            "COMPLETED",
-        )
+        self.assertEqual(tracker.run_status.value, "COMPLETED")
         self.assertEqual(
             len(self.workflow.history_store.read_history()),
             2,
@@ -112,16 +111,19 @@ class WorkflowPlanTests(unittest.TestCase):
                 WorkflowStep(
                     "safe step",
                     lambda: executed.append("safe") or "done",
+                    step_id="step-001",
                 ),
                 WorkflowStep(
                     "denied step",
                     lambda: executed.append("denied") or "should not run",
                     risk=RiskLevel.HIGH_RISK,
                     approval=ApprovalStatus.DENIED,
+                    step_id="step-002",
                 ),
                 WorkflowStep(
                     "after denied",
                     lambda: executed.append("after") or "should not run",
+                    step_id="step-003",
                 ),
             ),
         )
@@ -137,10 +139,7 @@ class WorkflowPlanTests(unittest.TestCase):
             self.workflow.task_status(self.task.task_id),
             WorkflowStatus.BLOCKED,
         )
-        self.assertEqual(
-            tracker.run_status.value,
-            "FAILED",
-        )
+        self.assertEqual(tracker.run_status.value, "FAILED")
 
     def test_blocked_step_stops_plan_without_executing_it(self) -> None:
         executed = []
@@ -152,10 +151,12 @@ class WorkflowPlanTests(unittest.TestCase):
                     "blocked step",
                     lambda: executed.append(True) or "should not run",
                     approval=ApprovalStatus.BLOCKED,
+                    step_id="step-001",
                 ),
                 WorkflowStep(
                     "after blocked",
                     lambda: executed.append("after") or "should not run",
+                    step_id="step-002",
                 ),
             ),
         )
@@ -177,10 +178,15 @@ class WorkflowPlanTests(unittest.TestCase):
         plan = WorkflowPlan(
             self.task,
             (
-                WorkflowStep("failing step", failing_action),
+                WorkflowStep(
+                    "failing step",
+                    failing_action,
+                    step_id="step-001",
+                ),
                 WorkflowStep(
                     "after failure",
                     lambda: executed.append("after") or "should not run",
+                    step_id="step-002",
                 ),
             ),
         )
@@ -196,10 +202,7 @@ class WorkflowPlanTests(unittest.TestCase):
             self.workflow.task_status(self.task.task_id),
             WorkflowStatus.FAILED,
         )
-        self.assertEqual(
-            tracker.run_status.value,
-            "FAILED",
-        )
+        self.assertEqual(tracker.run_status.value, "FAILED")
 
         history = self.workflow.history_store.read_history()
         self.assertEqual(len(history), 1)
@@ -216,6 +219,7 @@ class WorkflowPlanTests(unittest.TestCase):
                     approval=ApprovalStatus.APPROVED,
                     target="src",
                     context="structured plan test",
+                    step_id="step-001",
                 ),
             ),
         )
@@ -245,10 +249,52 @@ class WorkflowPlanTests(unittest.TestCase):
             self.workflow.history_store.read_history(),
             [],
         )
-        self.assertEqual(
-            tracker.run_status.value,
-            "COMPLETED",
+        self.assertEqual(tracker.run_status.value, "COMPLETED")
+
+    def test_duplicate_step_ids_are_rejected_by_tracker(self) -> None:
+        plan = WorkflowPlan(
+            self.task,
+            (
+                WorkflowStep(
+                    "first operation",
+                    lambda: "first",
+                    step_id="step-001",
+                ),
+                WorkflowStep(
+                    "second operation",
+                    lambda: "second",
+                    step_id="step-001",
+                ),
+            ),
         )
+
+        context = WorkflowRunContext.create(plan.task)
+
+        with self.assertRaises(ValueError):
+            ExecutionTracker(
+                context,
+                tuple(step.step_id for step in plan.steps),
+            )
+
+    def test_empty_step_id_is_rejected_by_tracker(self) -> None:
+        plan = WorkflowPlan(
+            self.task,
+            (
+                WorkflowStep(
+                    "operation without identity",
+                    lambda: "result",
+                    step_id="",
+                ),
+            ),
+        )
+
+        context = WorkflowRunContext.create(plan.task)
+
+        with self.assertRaises(ValueError):
+            ExecutionTracker(
+                context,
+                tuple(step.step_id for step in plan.steps),
+            )
 
 
 if __name__ == "__main__":

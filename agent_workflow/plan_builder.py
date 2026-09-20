@@ -15,11 +15,20 @@ def validate_plan(plan: WorkflowPlan) -> WorkflowPlan:
     if not plan.task.task_id:
         raise ValueError("Workflow plan task ID must not be empty")
 
-    for step in plan.steps:
+    for index, step in enumerate(plan.steps, start=1):
         if not isinstance(step, WorkflowStep):
             raise TypeError("Workflow plan steps must be WorkflowStep instances")
         if not step.operation:
             raise ValueError("Workflow step operation must not be empty")
+        if not step.step_id:
+            raise ValueError(
+                f"Workflow step {index} must have a non-empty step ID"
+            )
+
+    step_ids = [step.step_id for step in plan.steps]
+
+    if len(step_ids) != len(set(step_ids)):
+        raise ValueError("Workflow step IDs must not contain duplicates")
 
     return plan
 
@@ -28,11 +37,7 @@ def build_plan(
     task: WorkflowTask,
     steps: Iterable[WorkflowStep] = (),
 ) -> WorkflowPlan:
-    """Build and validate an immutable workflow plan.
-
-    This function only constructs a plan. It never executes an action,
-    modifies the project, or bypasses permission/approval handling.
-    """
+    """Build and validate an immutable workflow plan."""
     if not isinstance(task, WorkflowTask):
         raise TypeError("task must be a WorkflowTask")
 
@@ -42,5 +47,22 @@ def build_plan(
         if not isinstance(step, WorkflowStep):
             raise TypeError("steps must contain WorkflowStep instances")
 
-    plan = WorkflowPlan(task=task, steps=step_tuple)
+    normalized_steps = tuple(
+        WorkflowStep(
+            operation=step.operation,
+            action=step.action,
+            risk=step.risk,
+            approval=step.approval,
+            target=step.target,
+            context=step.context,
+            step_id=step.step_id or f"step-{index:03d}",
+        )
+        for index, step in enumerate(step_tuple, start=1)
+    )
+
+    plan = WorkflowPlan(
+        task=task,
+        steps=normalized_steps,
+    )
+
     return validate_plan(plan)

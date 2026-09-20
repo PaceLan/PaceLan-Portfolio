@@ -18,17 +18,23 @@ class WorkflowResult:
     blocked_steps: int
     completed_successfully: bool
     failure_index: int | None
+    run_id: str = ""
 
     @classmethod
     def from_step_results(
         cls,
-        step_results: tuple[WorkflowStepResult, ...] | list[WorkflowStepResult],
+        step_results: tuple[WorkflowStepResult, ...]
+        | list[WorkflowStepResult],
+        run_id: str = "",
     ) -> "WorkflowResult":
         """Build a stable observation without executing or modifying anything."""
         results = tuple(step_results)
 
         if not all(isinstance(result, WorkflowStepResult) for result in results):
             raise TypeError("step_results must contain WorkflowStepResult instances")
+
+        if not isinstance(run_id, str):
+            raise TypeError("run_id must be a string")
 
         total_steps = len(results)
         successful_steps = sum(1 for result in results if result.success)
@@ -72,6 +78,7 @@ class WorkflowResult:
             blocked_steps=blocked_steps,
             completed_successfully=completed_successfully,
             failure_index=failure_index,
+            run_id=run_id,
         )
 
     @property

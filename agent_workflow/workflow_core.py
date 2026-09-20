@@ -32,6 +32,7 @@ class WorkflowTask:
     task_id: str
     description: str
     context: str = ""
+    project_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -95,7 +96,12 @@ class AgentWorkflow:
         self.report.add(OperationRecord(operation, risk, approval, context))
 
         if approval in {ApprovalStatus.DENIED, ApprovalStatus.BLOCKED}:
-            result = WorkflowStepResult(operation, WorkflowStatus.BLOCKED, approval.value, False)
+            result = WorkflowStepResult(
+                operation,
+                WorkflowStatus.BLOCKED,
+                approval.value,
+                False,
+            )
             self._record_history(operation, target, result.result, False)
             self._task_status[task.task_id] = WorkflowStatus.BLOCKED
             return result
@@ -103,12 +109,22 @@ class AgentWorkflow:
         try:
             action_result = str(action())
         except Exception as error:
-            result = WorkflowStepResult(operation, WorkflowStatus.FAILED, type(error).__name__, False)
+            result = WorkflowStepResult(
+                operation,
+                WorkflowStatus.FAILED,
+                type(error).__name__,
+                False,
+            )
             self._record_history(operation, target, result.result, False)
             self._task_status[task.task_id] = WorkflowStatus.FAILED
             return result
 
-        result = WorkflowStepResult(operation, WorkflowStatus.COMPLETED, action_result, True)
+        result = WorkflowStepResult(
+            operation,
+            WorkflowStatus.COMPLETED,
+            action_result,
+            True,
+        )
         self._record_history(operation, target, result.result, True)
         self._task_status[task.task_id] = WorkflowStatus.COMPLETED
         return result
@@ -145,7 +161,10 @@ class AgentWorkflow:
         return self.run_step(
             task,
             "restore snapshot",
-            lambda: self.snapshot_service.restore_snapshot(snapshot_id, overwrite=overwrite).snapshot_id,
+            lambda: self.snapshot_service.restore_snapshot(
+                snapshot_id,
+                overwrite=overwrite,
+            ).snapshot_id,
             risk=risk,
             approval=approval,
             target=snapshot_id,
@@ -167,7 +186,13 @@ class AgentWorkflow:
         if task.task_id not in self._task_status:
             raise KeyError(f"Unknown workflow task: {task.task_id}")
 
-    def _record_history(self, operation: str, target: str, result: str, success: bool) -> None:
+    def _record_history(
+        self,
+        operation: str,
+        target: str,
+        result: str,
+        success: bool,
+    ) -> None:
         entry = HistoryEntry(
             timestamp=datetime.now(timezone.utc).isoformat(),
             operation=operation,

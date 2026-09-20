@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from agent_workflow.execution_tracking import RunStatus, StepStatus
+from agent_workflow.plan_builder import build_plan
 from agent_workflow.workflow_core import AgentWorkflow, WorkflowStatus, WorkflowTask
 from agent_workflow.workflow_plan import WorkflowPlan, WorkflowStep
 from agent_workflow.workflow_result import WorkflowResult
@@ -58,6 +59,35 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertEqual(result.successful_steps, 2)
         self.assertTrue(result.completed_successfully)
 
+    def test_execute_normalizes_legacy_empty_step_ids(self) -> None:
+        task = WorkflowTask("task-legacy", "Legacy plan test")
+        calls: list[str] = []
+
+        plan = WorkflowPlan(
+            task,
+            (
+                WorkflowStep(
+                    "legacy-step",
+                    lambda: calls.append("legacy-step") or "done",
+                ),
+            ),
+        )
+
+        self.assertEqual(plan.steps[0].step_id, "")
+
+        result = self.service.execute(plan)
+
+        self.assertEqual(calls, ["legacy-step"])
+        self.assertEqual(result.total_steps, 1)
+        self.assertEqual(result.successful_steps, 1)
+
+        tracker = self.service.last_execution_tracker
+        self.assertIsNotNone(tracker)
+        self.assertEqual(
+            tuple(tracker.snapshot().step_states.keys()),
+            ("step-001",),
+        )
+
     def test_run_context_is_established_from_plan_task(self) -> None:
         task = WorkflowTask("task-context", "Context test")
         plan = WorkflowPlan(
@@ -99,8 +129,27 @@ class WorkflowServiceTests(unittest.TestCase):
         )
         self.assertEqual(
             tuple(tracker.snapshot().step_states.keys()),
-            ("step-1", "step-2"),
+            ("step-001", "step-002"),
         )
+
+    def test_result_identity_matches_run_context(self) -> None:
+        task = WorkflowTask(
+            "task-result-identity",
+            "Result identity test",
+        )
+        plan = WorkflowPlan(
+            task,
+            (
+                WorkflowStep("step", lambda: "done"),
+            ),
+        )
+
+        result = self.service.execute(plan)
+
+        context = self.service.last_run_context
+        self.assertIsNotNone(context)
+
+        self.assertEqual(result.run_id, context.run_id)
 
     def test_successful_execution_tracks_complete_state(self) -> None:
         task = WorkflowTask("task-state-success", "State success test")
@@ -121,8 +170,8 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertEqual(
             dict(tracker.step_states),
             {
-                "step-1": StepStatus.SUCCESS,
-                "step-2": StepStatus.SUCCESS,
+                "step-001": StepStatus.SUCCESS,
+                "step-002": StepStatus.SUCCESS,
             },
         )
         self.assertIsNone(tracker.current_step)
@@ -191,9 +240,9 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertEqual(
             dict(tracker.step_states),
             {
-                "step-1": StepStatus.SUCCESS,
-                "step-2": StepStatus.FAILED,
-                "step-3": StepStatus.SKIPPED,
+                "step-001": StepStatus.SUCCESS,
+                "step-002": StepStatus.FAILED,
+                "step-003": StepStatus.SKIPPED,
             },
         )
         self.assertIsNone(tracker.current_step)
@@ -210,9 +259,9 @@ class WorkflowServiceTests(unittest.TestCase):
         self.assertEqual(
             dict(snapshot.step_states),
             {
-                "step-1": StepStatus.SUCCESS,
-                "step-2": StepStatus.FAILED,
-                "step-3": StepStatus.SKIPPED,
+                "step-001": StepStatus.SUCCESS,
+                "step-002": StepStatus.FAILED,
+                "step-003": StepStatus.SKIPPED,
             },
         )
         self.assertIsNone(snapshot.current_step)
@@ -481,12 +530,24 @@ class WorkflowServiceTests(unittest.TestCase):
             ) as mocked_result:
                 self.service.execute(plan)
 
+        normalized_plan = build_plan(
+            plan.task,
+            plan.steps,
+        )
+
         mocked_run_plan.assert_called_once_with(
             self.workflow,
-            plan,
+            normalized_plan,
             self.service.last_execution_tracker,
         )
-        mocked_result.assert_called_once_with((expected_result,))
+
+        context = self.service.last_run_context
+        self.assertIsNotNone(context)
+
+        mocked_result.assert_called_once_with(
+            (expected_result,),
+            run_id=context.run_id,
+        )
 
 
 if __name__ == "__main__":

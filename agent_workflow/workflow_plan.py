@@ -22,6 +22,7 @@ class WorkflowStep:
     approval: ApprovalStatus = ApprovalStatus.NOT_REQUESTED
     target: str = "."
     context: str | None = None
+    step_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,7 @@ def run_plan(
     results: list[WorkflowStepResult] = []
 
     for index, step in enumerate(plan.steps):
-        tracker.start_step(step.operation)
+        tracker.start_step(step.step_id)
 
         result = workflow.run_step(
             plan.task,
@@ -61,13 +62,13 @@ def run_plan(
         results.append(result)
 
         if result.success:
-            tracker.complete_step(step.operation)
+            tracker.complete_step(step.step_id)
             continue
 
-        tracker.fail_step(step.operation)
+        tracker.fail_step(step.step_id)
 
         for remaining_step in plan.steps[index + 1:]:
-            tracker.skip_step(remaining_step.operation)
+            tracker.skip_step(remaining_step.step_id)
 
         tracker.fail_run()
         break

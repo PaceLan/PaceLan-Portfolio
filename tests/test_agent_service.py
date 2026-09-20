@@ -161,11 +161,11 @@ class AgentServiceTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(first.snapshot.step_states.keys()),
-            ("step_1", "step_2"),
+            ("step-001", "step-002"),
         )
         self.assertEqual(
             tuple(second.snapshot.step_states.keys()),
-            ("only_step",),
+            ("step-001",),
         )
         self.assertNotEqual(
             first.run_context.run_id,

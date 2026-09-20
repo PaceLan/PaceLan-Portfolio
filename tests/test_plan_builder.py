@@ -24,7 +24,11 @@ class PlanBuilderTests(unittest.TestCase):
 
         self.assertIsInstance(plan, WorkflowPlan)
         self.assertIs(plan.task, self.task)
-        self.assertEqual(plan.steps, steps)
+        self.assertEqual(len(plan.steps), 2)
+        self.assertEqual(plan.steps[0].operation, "first")
+        self.assertEqual(plan.steps[1].operation, "second")
+        self.assertEqual(plan.steps[0].step_id, "step-001")
+        self.assertEqual(plan.steps[1].step_id, "step-002")
 
     def test_build_plan_accepts_iterable_and_freezes_steps(self) -> None:
         steps = [
@@ -50,7 +54,7 @@ class PlanBuilderTests(unittest.TestCase):
         plan = build_plan(self.task, steps)
 
         self.assertEqual(executed, [])
-        self.assertEqual(plan.steps, steps)
+        self.assertEqual(plan.steps[0].step_id, "step-001")
 
     def test_build_plan_preserves_risk_approval_target_and_context(self) -> None:
         step = WorkflowStep(
@@ -68,6 +72,18 @@ class PlanBuilderTests(unittest.TestCase):
         self.assertEqual(plan.steps[0].approval, ApprovalStatus.APPROVED)
         self.assertEqual(plan.steps[0].target, "src/example.py")
         self.assertEqual(plan.steps[0].context, "builder context")
+        self.assertEqual(plan.steps[0].step_id, "step-001")
+
+    def test_build_plan_preserves_explicit_step_id(self) -> None:
+        step = WorkflowStep(
+            "explicit identity",
+            lambda: "result",
+            step_id="custom-step",
+        )
+
+        plan = build_plan(self.task, (step,))
+
+        self.assertEqual(plan.steps[0].step_id, "custom-step")
 
     def test_empty_steps_build_empty_plan(self) -> None:
         plan = build_plan(self.task)
@@ -80,15 +96,55 @@ class PlanBuilderTests(unittest.TestCase):
 
     def test_invalid_step_type_is_rejected(self) -> None:
         with self.assertRaises(TypeError):
-            build_plan(self.task, ("not a workflow step",))  # type: ignore[arg-type]
+            build_plan(
+                self.task,
+                ("not a workflow step",),  # type: ignore[arg-type]
+            )
 
     def test_validate_plan_accepts_valid_plan(self) -> None:
         plan = WorkflowPlan(
             self.task,
-            (WorkflowStep("valid operation", lambda: "ok"),),
+            (
+                WorkflowStep(
+                    "valid operation",
+                    lambda: "ok",
+                    step_id="step-001",
+                ),
+            ),
         )
 
         self.assertIs(validate_plan(plan), plan)
+
+    def test_validate_plan_rejects_missing_step_id(self) -> None:
+        plan = WorkflowPlan(
+            self.task,
+            (
+                WorkflowStep("missing identity", lambda: "ok"),
+            ),
+        )
+
+        with self.assertRaises(ValueError):
+            validate_plan(plan)
+
+    def test_validate_plan_rejects_duplicate_step_ids(self) -> None:
+        plan = WorkflowPlan(
+            self.task,
+            (
+                WorkflowStep(
+                    "first",
+                    lambda: "first",
+                    step_id="duplicate",
+                ),
+                WorkflowStep(
+                    "second",
+                    lambda: "second",
+                    step_id="duplicate",
+                ),
+            ),
+        )
+
+        with self.assertRaises(ValueError):
+            validate_plan(plan)
 
     def test_validate_plan_does_not_execute_actions(self) -> None:
         executed = []
@@ -99,6 +155,7 @@ class PlanBuilderTests(unittest.TestCase):
                 WorkflowStep(
                     "validation only",
                     lambda: executed.append(True) or "should not execute",
+                    step_id="step-001",
                 ),
             ),
         )

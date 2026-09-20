@@ -40,7 +40,14 @@ class WorkflowService:
 
     def execute(self, plan: WorkflowPlan) -> WorkflowResult:
         """Execute an existing plan through the established workflow path."""
-        validated_plan = validate_plan(plan)
+        if not isinstance(plan, WorkflowPlan):
+            raise TypeError("plan must be a WorkflowPlan")
+
+        normalized_plan = build_plan(
+            plan.task,
+            plan.steps,
+        )
+        validated_plan = validate_plan(normalized_plan)
 
         self._last_run_context = WorkflowRunContext.create(
             validated_plan.task
@@ -48,7 +55,7 @@ class WorkflowService:
 
         tracker = ExecutionTracker(
             self._last_run_context,
-            tuple(step.operation for step in validated_plan.steps),
+            tuple(step.step_id for step in validated_plan.steps),
         )
         self._last_execution_tracker = tracker
         tracker.start_run()
@@ -59,4 +66,7 @@ class WorkflowService:
             tracker,
         )
 
-        return WorkflowResult.from_step_results(step_results)
+        return WorkflowResult.from_step_results(
+            step_results,
+            run_id=self._last_run_context.run_id,
+        )
