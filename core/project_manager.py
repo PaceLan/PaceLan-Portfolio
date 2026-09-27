@@ -1,6 +1,11 @@
 from pathlib import Path
 from typing import Dict, Optional, Union
 
+from agent_workflow.project_scanner import (
+    ProjectScanResult,
+    ProjectScanner,
+)
+
 
 class ProjectManager:
     def __init__(self) -> None:
@@ -27,3 +32,13 @@ class ProjectManager:
             "exists": self._project_path.exists(),
             "is_directory": self._project_path.is_dir(),
         }
+
+    def scan_project(self) -> ProjectScanResult:
+        """Scan the currently opened project."""
+
+        if self._project_path is None:
+            raise FileNotFoundError(
+                "No project is currently open."
+            )
+
+        return ProjectScanner(self._project_path).scan()

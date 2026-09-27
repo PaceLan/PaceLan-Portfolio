@@ -109,8 +109,8 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertEqual(
             snapshot.step_states,
             {
-                "step-one": StepStatus.SUCCESS,
-                "step-two": StepStatus.SUCCESS,
+                "step-001": StepStatus.SUCCESS,
+                "step-002": StepStatus.SUCCESS,
             },
         )
 
@@ -208,9 +208,9 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertEqual(
             snapshot.step_states,
             {
-                "first": StepStatus.SUCCESS,
-                "second": StepStatus.FAILED,
-                "third": StepStatus.SKIPPED,
+                "step-001": StepStatus.SUCCESS,
+                "step-002": StepStatus.FAILED,
+                "step-003": StepStatus.SKIPPED,
             },
         )
 
@@ -323,9 +323,9 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertEqual(
             snapshot.step_states,
             {
-                "first": StepStatus.SUCCESS,
-                "blocked": StepStatus.FAILED,
-                "third": StepStatus.SKIPPED,
+                "step-001": StepStatus.SUCCESS,
+                "step-002": StepStatus.FAILED,
+                "step-003": StepStatus.SKIPPED,
             },
         )
 
@@ -470,7 +470,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertEqual(
             snapshot.step_states,
             {
-                "only-step": StepStatus.FAILED,
+                "step-001": StepStatus.FAILED,
             },
         )
 
@@ -569,7 +569,7 @@ class WorkflowIntegrationTests(unittest.TestCase):
         self.assertEqual(
             snapshot.step_states,
             {
-                "only-step": StepStatus.FAILED,
+                "step-001": StepStatus.FAILED,
             },
         )
 

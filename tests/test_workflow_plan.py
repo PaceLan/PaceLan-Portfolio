@@ -208,6 +208,67 @@ class WorkflowPlanTests(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertFalse(history[0].success)
 
+    def test_failed_step_marks_remaining_steps_skipped(self) -> None:
+        executed = []
+
+        def failing_action() -> str:
+            executed.append("failed")
+            raise RuntimeError("controlled failure")
+
+        plan = WorkflowPlan(
+            self.task,
+            (
+                WorkflowStep(
+                    "successful step",
+                    lambda: executed.append("success") or "done",
+                    step_id="step-001",
+                ),
+                WorkflowStep(
+                    "failing step",
+                    failing_action,
+                    step_id="step-002",
+                ),
+                WorkflowStep(
+                    "skipped step",
+                    lambda: executed.append("skipped") or "should not run",
+                    step_id="step-003",
+                ),
+            ),
+        )
+
+        tracker = self.make_tracker(plan)
+        results = run_plan(self.workflow, plan, tracker)
+
+        self.assertEqual(
+            executed,
+            ["success", "failed"],
+        )
+
+        self.assertEqual(
+            [result.status for result in results],
+            [
+                WorkflowStatus.COMPLETED,
+                WorkflowStatus.FAILED,
+            ],
+        )
+
+        self.assertEqual(
+            tracker.step_states["step-001"].value,
+            "SUCCESS",
+        )
+        self.assertEqual(
+            tracker.step_states["step-002"].value,
+            "FAILED",
+        )
+        self.assertEqual(
+            tracker.step_states["step-003"].value,
+            "SKIPPED",
+        )
+        self.assertEqual(
+            tracker.run_status.value,
+            "FAILED",
+        )
+
     def test_step_risk_and_approval_are_forwarded(self) -> None:
         plan = WorkflowPlan(
             self.task,

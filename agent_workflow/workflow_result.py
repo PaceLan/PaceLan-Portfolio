@@ -1,4 +1,4 @@
-﻿"""Immutable observation and reporting for completed workflow results."""
+"""Immutable observation and reporting for completed workflow results."""
 
 from dataclasses import dataclass
 from typing import Tuple

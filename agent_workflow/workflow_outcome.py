@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from agent_workflow.workflow_core import WorkflowStatus
 from agent_workflow.workflow_result import WorkflowResult

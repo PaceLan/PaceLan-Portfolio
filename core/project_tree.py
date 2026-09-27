@@ -43,9 +43,13 @@ class ProjectTree:
         if not is_directory:
             return node
 
-        for child_path in sorted(path.iterdir(), key=lambda item: item.name.lower()):
+        for child_path in sorted(
+            path.iterdir(),
+            key=lambda item: item.name.lower(),
+        ):
             if child_path.is_dir() and child_path.name in IGNORED_DIRECTORIES:
                 continue
+
             node.children.append(self._build_node(child_path))
 
         return node

@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 from uuid import uuid4
 
 from agent_workflow.workflow_core import WorkflowTask

@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 from agent_workflow.plan_builder import build_plan, validate_plan
 from agent_workflow.workflow_core import WorkflowTask
@@ -167,6 +167,33 @@ class PlanBuilderTests(unittest.TestCase):
     def test_validate_plan_rejects_invalid_type(self) -> None:
         with self.assertRaises(TypeError):
             validate_plan("not a plan")  # type: ignore[arg-type]
+
+    def test_validate_plan_rejects_non_callable_action(self) -> None:
+        plan = WorkflowPlan(
+            self.task,
+            (
+                WorkflowStep(
+                    "invalid action",
+                    "not callable",  # type: ignore[arg-type]
+                    step_id="step-001",
+                ),
+            ),
+        )
+
+        with self.assertRaises(TypeError):
+            validate_plan(plan)
+
+    def test_build_plan_rejects_non_callable_action(self) -> None:
+        with self.assertRaises(TypeError):
+            build_plan(
+                self.task,
+                (
+                    WorkflowStep(
+                        "invalid action",
+                        "not callable",  # type: ignore[arg-type]
+                    ),
+                ),
+            )
 
 
 if __name__ == "__main__":
