@@ -1,9 +1,9 @@
-import tempfile
+﻿import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from core.project_tree import ProjectTreeNode
+from application.workspace import ApplicationTreeNode
 from ui.controller import ApplicationController, ProjectContext
 
 
@@ -11,9 +11,17 @@ class UiControllerTests(unittest.TestCase):
     def test_controller_starts_with_clean_state(self) -> None:
         controller = ApplicationController()
 
-        self.assertEqual(controller.project_context, ProjectContext(None, None, False, False))
-        self.assertEqual(controller.initial_state()["status"], "Ready")
-        self.assertFalse(controller.initial_state()["tree_loaded"])
+        self.assertEqual(
+            controller.project_context,
+            ProjectContext(None, None, False, False),
+        )
+
+        state = controller.initial_state()
+
+        self.assertEqual(state.status, "Ready")
+        self.assertFalse(state.tree.loaded)
+        self.assertIsNone(state.selected_file.path)
+        self.assertFalse(state.viewer.loaded)
 
     def test_open_project_delegates_to_project_manager(self) -> None:
         project_manager = Mock()
@@ -33,9 +41,22 @@ class UiControllerTests(unittest.TestCase):
         self.assertTrue(context.is_directory)
 
     def test_tree_data_is_delegated_to_injected_provider(self) -> None:
-        root_node = ProjectTreeNode("Demo", Path("C:/Demo"), True)
+        root_node = ApplicationTreeNode(
+            "Demo",
+            Path("C:/Demo"),
+            True,
+        )
         tree_provider = Mock()
-        tree_provider.build_tree.return_value = root_node
+
+        from core.project_tree import ProjectTreeNode
+
+        core_root = ProjectTreeNode(
+            "Demo",
+            Path("C:/Demo"),
+            True,
+        )
+        tree_provider.build_tree.return_value = core_root
+
         project_manager = Mock()
         project_manager.get_project_info.return_value = {
             "project_name": "Demo",
@@ -43,12 +64,16 @@ class UiControllerTests(unittest.TestCase):
             "exists": True,
             "is_directory": True,
         }
-        controller = ApplicationController(project_manager, tree_provider)
+
+        controller = ApplicationController(
+            project_manager,
+            tree_provider,
+        )
         controller.open_project("C:/Demo")
 
         result = controller.get_project_tree()
 
-        self.assertIs(result, root_node)
+        self.assertEqual(result, root_node)
         tree_provider.build_tree.assert_called_once_with()
 
     def test_tree_requires_valid_project_context(self) -> None:
@@ -65,8 +90,10 @@ class UiControllerTests(unittest.TestCase):
             "exists": True,
             "is_directory": True,
         }
+
         file_reader = Mock()
         file_reader.read_file.return_value = "print('demo')"
+
         controller = ApplicationController(
             project_manager=project_manager,
             file_reader=file_reader,
@@ -88,8 +115,12 @@ class UiControllerTests(unittest.TestCase):
             "exists": True,
             "is_directory": True,
         }
+
         file_reader = Mock()
-        file_reader.read_file.side_effect = FileNotFoundError("File does not exist")
+        file_reader.read_file.side_effect = FileNotFoundError(
+            "File does not exist"
+        )
+
         controller = ApplicationController(
             project_manager=project_manager,
             file_reader=file_reader,
@@ -111,12 +142,33 @@ class UiControllerTests(unittest.TestCase):
                 "exists": True,
                 "is_directory": True,
             }
-            controller = ApplicationController(project_manager=project_manager)
+
+            controller = ApplicationController(
+                project_manager=project_manager
+            )
 
             controller.open_project(temporary_root)
 
-            self.assertEqual(controller.project_context.path, Path(temporary_root))
-            self.assertEqual(controller.initial_state()["content_placeholder"], "Select a project item to inspect it.")
+            self.assertEqual(
+                controller.project_context.path,
+                Path(temporary_root),
+            )
+
+            state = controller.initial_state()
+
+            self.assertEqual(
+                state.status,
+                "Ready",
+            )
+            self.assertFalse(
+                state.tree.loaded,
+            )
+            self.assertIsNone(
+                state.selected_file.path,
+            )
+            self.assertFalse(
+                state.viewer.loaded,
+            )
 
 
 if __name__ == "__main__":
