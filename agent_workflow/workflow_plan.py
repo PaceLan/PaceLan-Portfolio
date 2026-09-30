@@ -1,4 +1,4 @@
-﻿"""Immutable workflow plan definitions and deterministic plan execution."""
+"""Immutable workflow plan definitions and deterministic plan execution."""
 
 from dataclasses import dataclass
 from typing import Callable, Tuple

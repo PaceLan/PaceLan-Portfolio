@@ -1,4 +1,4 @@
-﻿"""Immutable workspace state models for the Coding Assistant UI."""
+"""Immutable workspace state models for the Coding Assistant UI."""
 
 from dataclasses import dataclass
 from typing import Optional

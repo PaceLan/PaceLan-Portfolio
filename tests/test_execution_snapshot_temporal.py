@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from datetime import datetime, timezone
 
 from agent_workflow.execution_snapshot import ExecutionSnapshot

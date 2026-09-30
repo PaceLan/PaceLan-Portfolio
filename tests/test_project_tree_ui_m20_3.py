@@ -1,4 +1,4 @@
-﻿import tkinter as tk
+import tkinter as tk
 import unittest
 from pathlib import Path
 from unittest.mock import Mock

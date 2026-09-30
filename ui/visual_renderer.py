@@ -1,4 +1,4 @@
-﻿"""Tkinter rendering adapter for the immutable UX composition layer."""
+"""Tkinter rendering adapter for the immutable UX composition layer."""
 
 import tkinter as tk
 from tkinter import ttk

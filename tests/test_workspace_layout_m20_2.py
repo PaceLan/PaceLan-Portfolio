@@ -1,4 +1,4 @@
-﻿"""M20.2 Workspace Layout tests."""
+"""M20.2 Workspace Layout tests."""
 
 import unittest
 

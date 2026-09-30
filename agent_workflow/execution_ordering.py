@@ -1,4 +1,4 @@
-﻿"""Deterministic workflow execution ordering."""
+"""Deterministic workflow execution ordering."""
 
 from agent_workflow.step_dependency import StepDependencyAwareness
 from agent_workflow.workflow_plan import WorkflowPlan

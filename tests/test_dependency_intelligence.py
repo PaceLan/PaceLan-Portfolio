@@ -1,4 +1,4 @@
-﻿"""Tests for static dependency intelligence."""
+"""Tests for static dependency intelligence."""
 
 import unittest
 from pathlib import Path

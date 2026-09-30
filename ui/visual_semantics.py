@@ -1,4 +1,4 @@
-﻿"""Immutable visual semantic definitions for the UI layer."""
+"""Immutable visual semantic definitions for the UI layer."""
 
 from dataclasses import dataclass
 

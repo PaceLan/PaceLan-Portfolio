@@ -1,9 +1,7 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from agent_workflow.context_understanding import (
-    ContextUnderstandingResult,
-)
+from agent_workflow.context_understanding import ContextUnderstandingResult
 from agent_workflow.execution_snapshot import ExecutionSnapshot
 from agent_workflow.execution_summary import ExecutionSummary
 from agent_workflow.project_context_interface import ProjectContextAgentInterface
@@ -95,13 +93,13 @@ class AgentService:
         )
 
         return AgentExecution(
-    task=task,
-    plan=plan,
-    run_context=run_context,
-    result=result,
-    analysis=analysis,
-    snapshot=snapshot,
-    summary=summary,
-    project_context_agent=self.project_context_agent,
-    context_understanding=context_understanding,
-)
+            task=task,
+            plan=plan,
+            run_context=run_context,
+            result=result,
+            analysis=analysis,
+            snapshot=snapshot,
+            summary=summary,
+            project_context_agent=self.project_context_agent,
+            context_understanding=context_understanding,
+        )

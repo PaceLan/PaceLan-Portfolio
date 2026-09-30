@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 from agent_workflow.execution_readiness import (
     ExecutionReadiness,

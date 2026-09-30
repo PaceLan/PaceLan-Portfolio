@@ -1,4 +1,4 @@
-﻿"""High-level orchestration facade for Agent Workflow execution."""
+"""High-level orchestration facade for Agent Workflow execution."""
 
 from collections.abc import Iterable
 

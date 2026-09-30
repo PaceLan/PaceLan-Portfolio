@@ -1,4 +1,4 @@
-﻿"""Deterministic task-driven planner intelligence."""
+"""Deterministic task-driven planner intelligence."""
 
 from collections.abc import Iterable
 from pathlib import Path

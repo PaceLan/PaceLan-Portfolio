@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 
 class VisualLayoutM194Tests(unittest.TestCase):

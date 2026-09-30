@@ -1,4 +1,4 @@
-﻿"""Immutable UX composition contracts for the UI design system."""
+"""Immutable UX composition contracts for the UI design system."""
 
 from dataclasses import dataclass
 

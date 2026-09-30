@@ -1,4 +1,4 @@
-﻿"""Immutable workspace composition definitions for the UI layer."""
+"""Immutable workspace composition definitions for the UI layer."""
 
 from dataclasses import dataclass
 from typing import Tuple

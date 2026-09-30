@@ -1,4 +1,4 @@
-﻿"""Deterministic read-only workflow step dependency analysis."""
+"""Deterministic read-only workflow step dependency analysis."""
 
 from dataclasses import dataclass
 from typing import Mapping

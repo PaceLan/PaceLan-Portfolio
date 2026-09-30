@@ -1,4 +1,4 @@
-﻿"""Semantic mapping between visual interaction states and visual semantics."""
+"""Semantic mapping between visual interaction states and visual semantics."""
 
 from .visual_interaction import VisualInteractionState
 from .visual_semantics import VisualSemantic

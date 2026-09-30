@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from pathlib import Path
 
 from ui.controller import ApplicationController, ProjectContext

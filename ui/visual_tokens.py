@@ -1,4 +1,4 @@
-﻿"""Framework-agnostic visual design tokens for PacePilot."""
+"""Framework-agnostic visual design tokens for PacePilot."""
 
 from dataclasses import dataclass
 from types import MappingProxyType

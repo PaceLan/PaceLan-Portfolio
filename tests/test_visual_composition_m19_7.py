@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 from dataclasses import FrozenInstanceError, is_dataclass
 
 from ui.visual_components import Navigation, Panel, State, Workspace

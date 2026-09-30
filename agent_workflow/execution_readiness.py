@@ -1,4 +1,4 @@
-﻿"""Deterministic execution-readiness analysis for workflow plans."""
+"""Deterministic execution-readiness analysis for workflow plans."""
 
 from dataclasses import dataclass
 from typing import Tuple

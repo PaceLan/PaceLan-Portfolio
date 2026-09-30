@@ -1,4 +1,4 @@
-﻿"""Tests for deterministic planner intelligence."""
+"""Tests for deterministic planner intelligence."""
 
 import tempfile
 import unittest
