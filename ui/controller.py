@@ -1,9 +1,11 @@
-﻿"""Application-level coordination for the Coding Assistant UI."""
+"""Application-level coordination for the Coding Assistant UI."""
 
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
+from application.models import TaskModel
+from application.services import ApplicationExecutionService
 from application.workspace import (
     ApplicationTreeNode,
     ProjectTreeProvider,
@@ -16,6 +18,8 @@ from ui.workspace_state import (
     ViewerState,
     WorkspaceState,
 )
+from ui.agent_adapter import AgentUIAdapter
+from ui.agent_state import AgentInteractionState
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,7 @@ class ApplicationController:
         tree_provider: Optional[ProjectTreeProvider] = None,
         file_reader: Optional[FileReaderProvider] = None,
         workspace: Optional[ProjectWorkspaceService] = None,
+        agent_service=None,
     ) -> None:
         self.workspace = workspace or ProjectWorkspaceService(
             project_manager=project_manager,
@@ -54,10 +59,22 @@ class ApplicationController:
             file_reader=file_reader,
         )
         self._project_context = ProjectContext(None, None, False, False)
+        self.agent_service = agent_service
+        self.application_execution_service = (
+            ApplicationExecutionService(agent_service)
+            if agent_service is not None
+            else None
+        )
+        self.agent_state = AgentInteractionState()
+        self._agent_history = ()
 
     @property
     def project_context(self) -> ProjectContext:
         return self._project_context
+
+    @property
+    def agent_history(self):
+        return self.agent_state.history
 
     def open_project(self, path: Union[str, Path]) -> ProjectContext:
         info = self.workspace.open_project(path)
@@ -100,6 +117,93 @@ class ApplicationController:
             contents=contents,
         )
 
+    def run_agent_task(
+        self,
+        task,
+        steps=(),
+    ) -> AgentInteractionState:
+        if self.application_execution_service is None:
+            raise RuntimeError(
+                "ApplicationExecutionService is not configured"
+            )
+
+        application_task = TaskModel(
+            task_id=task.task_id,
+            project_id=task.project_id,
+            description=task.description,
+            context=task.context,
+        )
+
+        execution = self.application_execution_service.run(
+            application_task,
+            steps,
+        )
+
+        entry = AgentUIAdapter.history_entry(execution)
+
+        self._agent_history = (
+            *self._agent_history,
+            entry,
+        )
+
+        self.agent_state = AgentUIAdapter.from_execution(execution)
+
+        self.agent_state = self._with_history(
+            self.agent_state,
+            selected_run_id=entry.run_id,
+        )
+
+        return self.agent_state
+
+    def select_agent_history(
+        self,
+        run_id: str,
+    ) -> AgentInteractionState:
+        history = self.agent_state.history
+
+        entry = next(
+            (
+                item
+                for item in history.entries
+                if item.run_id == run_id
+            ),
+            None,
+        )
+
+        if entry is None:
+            raise ValueError(
+                f"Unknown Agent history run: {run_id}"
+            )
+
+        historical_state = AgentUIAdapter.from_history_entry(entry)
+
+        self.agent_state = self._with_history(
+            historical_state,
+            selected_run_id=run_id,
+        )
+
+        return self.agent_state
+
+    def _with_history(
+        self,
+        state: AgentInteractionState,
+        selected_run_id: str | None,
+    ) -> AgentInteractionState:
+        history = AgentUIAdapter.history_state(
+            self._agent_history,
+            selected_run_id=selected_run_id,
+        )
+
+        return AgentInteractionState(
+            task=state.task,
+            plan=state.plan,
+            understanding=state.understanding,
+            risk_approval=state.risk_approval,
+            execution=state.execution,
+            result=state.result,
+            history=history,
+        )
+
     def initial_state(self) -> WorkspaceState:
         return WorkspaceState(
             project=self._project_context,
@@ -108,3 +212,10 @@ class ApplicationController:
             viewer=ViewerState(),
             status="Ready",
         )
+
+
+__all__ = [
+    "ProjectContext",
+    "FileLoadResult",
+    "ApplicationController",
+]
