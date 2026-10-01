@@ -6,6 +6,7 @@ from typing import Optional, Union
 
 from application.bootstrap import ApplicationBootstrap, ApplicationRuntime
 from ui.app import CodingAssistantApp, create_app as _create_app
+from ui.opening_experience import OpeningExperience
 
 
 def create_runtime(
@@ -66,7 +67,8 @@ def main() -> None:
         ) / "PacePilot" / "runtime"
         runtime_root.mkdir(parents=True, exist_ok=True)
         runtime = create_runtime(runtime_root)
-        create_app(root, agent_service=runtime.agent_service)
+        app = create_app(root, agent_service=runtime.agent_service)
+        OpeningExperience(root, ambient=app.ambient, theme_state=app.theme_state).start()
         root.mainloop()
     except Exception as error:
         if root is None:
