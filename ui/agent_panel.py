@@ -4,6 +4,8 @@ from tkinter import ttk
 
 from ui.agent_state import AgentInteractionState
 from ui.visual_system import AgentPanelVisualSystem, AgentStage
+from ui.animation_accessibility import AnimationAccessibility
+from ui.visual_icons import VisualIconSet
 from ui.visual_renderer import VisualRenderer
 from ui.visual_composition import DEFAULT_UX_COMPOSITION, UXComposition
 
@@ -28,12 +30,25 @@ class AgentInteractionPanel(ttk.LabelFrame):
         state: AgentInteractionState | None = None,
         composition: UXComposition | None = None,
         controller=None,
+        accessibility: AnimationAccessibility | None = None,
+        icons: VisualIconSet | None = None,
     ) -> None:
-        super().__init__(parent, text="Agent", padding=12)
+        super().__init__(parent, text="", padding=12)
 
         self.composition = composition or DEFAULT_UX_COMPOSITION
         self.visual_renderer = VisualRenderer(self, self.composition)
+        self.visual_renderer.apply_navigation(self)
         self.controller = controller
+        self.accessibility = accessibility or AnimationAccessibility()
+        self.icons = icons or VisualIconSet(self, self.composition.tokens)
+        self.heading_label = ttk.Label(
+            self,
+            text="Agent",
+            image=self.icons.image("agent"),
+            compound=tk.LEFT,
+            style="PacePilot.Panel.TLabelframe.Label",
+        )
+        self.configure(labelwidget=self.heading_label)
         self._stage_frames = {}
         self._stage_titles = {}
 
@@ -70,6 +85,8 @@ class AgentInteractionPanel(ttk.LabelFrame):
             self,
             self._stage_frames,
             self._stage_titles,
+            tokens=self.composition.tokens,
+            accessibility=self.accessibility,
         )
 
         self.render(
@@ -91,6 +108,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
         stage: AgentStage | None = None,
     ) -> ttk.Label:
         frame = ttk.Frame(self)
+        self.visual_renderer.apply_section_frame(frame)
         frame.grid(
             row=row,
             column=0,
@@ -108,9 +126,15 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="w",
             pady=(0, 3),
         )
-        self.visual_renderer.apply_text_label(title_label)
+        self.visual_renderer.apply_section_header(title_label)
         if stage is not None:
             self._stage_titles[stage] = title_label
+            icon_name = {
+                AgentStage.TASK: "task",
+                AgentStage.RESULT: "result",
+            }.get(stage)
+            if icon_name is not None:
+                self._apply_heading_icon(title_label, icon_name)
 
         value_label = ttk.Label(
             frame,
@@ -122,12 +146,19 @@ class AgentInteractionPanel(ttk.LabelFrame):
             column=0,
             sticky="ew",
         )
-        self.visual_renderer.apply_text_label(value_label)
+        self.visual_renderer.apply_section_label(value_label)
 
         return value_label
 
+    def _apply_heading_icon(self, label: ttk.Label, icon_name: str) -> None:
+        label.configure(
+            image=self.icons.image(icon_name),
+            compound=tk.LEFT,
+        )
+
     def _build_understanding_section(self, row: int) -> None:
         frame = ttk.Frame(self)
+        self.visual_renderer.apply_section_frame(frame)
         frame.grid(
             row=row,
             column=0,
@@ -144,8 +175,9 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="w",
             pady=(0, 3),
         )
-        self.visual_renderer.apply_text_label(title_label)
+        self.visual_renderer.apply_section_header(title_label)
         self._stage_titles[AgentStage.UNDERSTANDING] = title_label
+        self._apply_heading_icon(title_label, "understanding")
 
         self.understanding_summary = self._create_understanding_label(
             frame, 1, "No understanding available"
@@ -176,11 +208,12 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="ew",
             pady=(1, 1),
         )
-        self.visual_renderer.apply_text_label(label)
+        self.visual_renderer.apply_section_label(label)
         return label
 
     def _build_plan_section(self, row: int) -> None:
         frame = ttk.Frame(self)
+        self.visual_renderer.apply_section_frame(frame)
         frame.grid(
             row=row,
             column=0,
@@ -197,8 +230,9 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="w",
             pady=(0, 3),
         )
-        self.visual_renderer.apply_text_label(title_label)
+        self.visual_renderer.apply_section_header(title_label)
         self._stage_titles[AgentStage.PLAN] = title_label
+        self._apply_heading_icon(title_label, "plan")
 
         self.plan_value = ttk.Label(
             frame,
@@ -210,7 +244,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             column=0,
             sticky="ew",
         )
-        self.visual_renderer.apply_text_label(self.plan_value)
+        self.visual_renderer.apply_section_label(self.plan_value)
 
         self.plan_summary = self.plan_value
 
@@ -225,7 +259,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="ew",
             pady=(2, 2),
         )
-        self.visual_renderer.apply_text_label(self.plan_status)
+        self.visual_renderer.apply_section_label(self.plan_status)
 
         self.plan_step_count = ttk.Label(
             frame,
@@ -237,7 +271,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             column=0,
             sticky="ew",
         )
-        self.visual_renderer.apply_text_label(self.plan_step_count)
+        self.visual_renderer.apply_section_label(self.plan_step_count)
 
         self.plan_steps = tk.Listbox(
             frame,
@@ -245,6 +279,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             height=4,
             activestyle="none",
         )
+        self.visual_renderer.apply_listbox(self.plan_steps)
         self.plan_steps.grid(
             row=4,
             column=0,
@@ -254,6 +289,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
 
     def _build_risk_approval_section(self, row: int) -> None:
         frame = ttk.Frame(self)
+        self.visual_renderer.apply_section_frame(frame)
         frame.grid(
             row=row,
             column=0,
@@ -270,8 +306,9 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="w",
             pady=(0, 3),
         )
-        self.visual_renderer.apply_text_label(title_label)
+        self.visual_renderer.apply_section_header(title_label)
         self._stage_titles[AgentStage.APPROVAL] = title_label
+        self._apply_heading_icon(title_label, "approval")
 
         self.risk_approval_value = ttk.Label(
             frame,
@@ -283,7 +320,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             column=0,
             sticky="ew",
         )
-        self.visual_renderer.apply_text_label(self.risk_approval_value)
+        self.visual_renderer.apply_section_label(self.risk_approval_value)
 
         self.risk_approval_step_count = ttk.Label(
             frame,
@@ -296,7 +333,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="ew",
             pady=(2, 2),
         )
-        self.visual_renderer.apply_text_label(
+        self.visual_renderer.apply_section_label(
             self.risk_approval_step_count
         )
 
@@ -310,7 +347,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             column=0,
             sticky="ew",
         )
-        self.visual_renderer.apply_text_label(
+        self.visual_renderer.apply_section_label(
             self.risk_approval_issues
         )
 
@@ -324,7 +361,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             column=0,
             sticky="ew",
         )
-        self.visual_renderer.apply_text_label(
+        self.visual_renderer.apply_section_label(
             self.risk_approval_warnings
         )
 
@@ -334,6 +371,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             height=4,
             activestyle="none",
         )
+        self.visual_renderer.apply_listbox(self.risk_approval_steps)
         self.risk_approval_steps.grid(
             row=5,
             column=0,
@@ -343,6 +381,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
 
     def _build_history_section(self, row: int) -> None:
         frame = ttk.Frame(self)
+        self.visual_renderer.apply_section_frame(frame)
         frame.grid(
             row=row,
             column=0,
@@ -350,7 +389,6 @@ class AgentInteractionPanel(ttk.LabelFrame):
             pady=(0, 10),
         )
         frame.columnconfigure(0, weight=1)
-        self._stage_frames[AgentStage.EXECUTION] = frame
 
         title_label = ttk.Label(frame, text="History")
         title_label.grid(
@@ -359,8 +397,8 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="w",
             pady=(0, 3),
         )
-        self.visual_renderer.apply_text_label(title_label)
-        self._stage_titles[AgentStage.EXECUTION] = title_label
+        self.visual_renderer.apply_section_header(title_label)
+        self._apply_heading_icon(title_label, "history")
 
         self.history_status = ttk.Label(
             frame,
@@ -372,7 +410,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             column=0,
             sticky="ew",
         )
-        self.visual_renderer.apply_text_label(self.history_status)
+        self.visual_renderer.apply_section_label(self.history_status)
 
         self.history_selected = ttk.Label(
             frame,
@@ -385,7 +423,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="ew",
             pady=(2, 2),
         )
-        self.visual_renderer.apply_text_label(self.history_selected)
+        self.visual_renderer.apply_section_label(self.history_selected)
 
         self.history_entries = tk.Listbox(
             frame,
@@ -393,6 +431,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             height=5,
             activestyle="none",
         )
+        self.visual_renderer.apply_listbox(self.history_entries)
         self.history_entries.grid(
             row=3,
             column=0,
@@ -426,6 +465,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
 
     def _build_execution_section(self, row: int) -> None:
         frame = ttk.Frame(self)
+        self.visual_renderer.apply_section_frame(frame)
         frame.grid(
             row=row,
             column=0,
@@ -433,6 +473,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             pady=(0, 10),
         )
         frame.columnconfigure(0, weight=1)
+        self._stage_frames[AgentStage.EXECUTION] = frame
 
         title_label = ttk.Label(frame, text="Execution")
         title_label.grid(
@@ -441,7 +482,9 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="w",
             pady=(0, 3),
         )
-        self.visual_renderer.apply_text_label(title_label)
+        self.visual_renderer.apply_section_header(title_label)
+        self._stage_titles[AgentStage.EXECUTION] = title_label
+        self._apply_heading_icon(title_label, "execution")
 
         self.execution_value = self._create_execution_label(
             frame, 1, "Idle"
@@ -470,6 +513,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             height=4,
             activestyle="none",
         )
+        self.visual_renderer.apply_listbox(self.execution_steps)
         self.execution_steps.grid(
             row=7,
             column=0,
@@ -494,11 +538,12 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="ew",
             pady=(1, 1),
         )
-        self.visual_renderer.apply_text_label(label)
+        self.visual_renderer.apply_section_label(label)
         return label
 
     def _build_runtime_controls(self, row: int) -> None:
         frame = ttk.Frame(self)
+        self.visual_renderer.apply_section_frame(frame)
         frame.grid(
             row=row,
             column=0,
@@ -515,7 +560,7 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="w",
             pady=(0, 3),
         )
-        self.visual_renderer.apply_text_label(title_label)
+        self.visual_renderer.apply_section_header(title_label)
 
         self.runtime_status = ttk.Label(
             frame,
@@ -529,11 +574,13 @@ class AgentInteractionPanel(ttk.LabelFrame):
             sticky="ew",
             pady=(0, 5),
         )
-        self.visual_renderer.apply_text_label(self.runtime_status)
+        self.visual_renderer.apply_section_label(self.runtime_status)
 
         self.start_button = ttk.Button(
             frame,
             text="Start",
+            image=self.icons.image("execution"),
+            compound=tk.LEFT,
             command=self._on_start,
         )
         self.start_button.grid(row=2, column=0, padx=(0, 4))
@@ -541,6 +588,8 @@ class AgentInteractionPanel(ttk.LabelFrame):
         self.pause_button = ttk.Button(
             frame,
             text="Pause",
+            image=self.icons.image("pause"),
+            compound=tk.LEFT,
             command=self._on_pause,
         )
         self.pause_button.grid(row=2, column=1, padx=4)
@@ -548,6 +597,8 @@ class AgentInteractionPanel(ttk.LabelFrame):
         self.resume_button = ttk.Button(
             frame,
             text="Resume",
+            image=self.icons.image("execution"),
+            compound=tk.LEFT,
             command=self._on_resume,
         )
         self.resume_button.grid(row=2, column=2, padx=4)
@@ -555,6 +606,8 @@ class AgentInteractionPanel(ttk.LabelFrame):
         self.terminate_button = ttk.Button(
             frame,
             text="Terminate",
+            image=self.icons.image("stop"),
+            compound=tk.LEFT,
             command=self._on_terminate,
         )
         self.terminate_button.grid(row=2, column=3, padx=(4, 0))

@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
+from threading import Event, RLock
 
 from agent_workflow.agent_project_planner import AgentProjectPlanner
 from agent_workflow.agent_service import AgentService
@@ -23,7 +24,10 @@ from agent_workflow.workflow_core import WorkflowTask
 from agent_workflow.workflow_plan import WorkflowPlan, WorkflowStep
 from agent_workflow.workflow_result import WorkflowResult
 
-from .runtime_control import ApplicationRuntimeControlService
+from .runtime_control import (
+    ApplicationRuntimeControlService,
+    RuntimeControlState,
+)
 
 from .models import (
     ApplicationExecutionModel,
@@ -363,8 +367,13 @@ class ApplicationExecutionService:
             thread_name_prefix="pacepilot-agent",
         )
         self._active_future: Future | None = None
+        self._runtime_lock = RLock()
+        self._resume_gate = Event()
+        self._resume_gate.set()
+        self._terminate_requested = Event()
+        self._runtime_state = RuntimeControlState.IDLE
         self.runtime_control = ApplicationRuntimeControlService(
-            agent_service,
+            self,
         )
 
     def start(
@@ -382,11 +391,16 @@ class ApplicationExecutionService:
         ):
             raise RuntimeError("agent execution is already active")
 
-        self._active_future = self._executor.submit(
-            self.run,
-            task,
-            steps,
-        )
+        self._begin_runtime()
+        try:
+            self._active_future = self._executor.submit(
+                self.run,
+                task,
+                steps,
+            )
+        except Exception:
+            self._finish_runtime()
+            raise
         return self._active_future
 
     def pause(self):
@@ -401,6 +415,66 @@ class ApplicationExecutionService:
     def runtime_status(self):
         return self.runtime_control.status()
 
+    def pause_runtime(self) -> None:
+        with self._runtime_lock:
+            if self._runtime_state is not RuntimeControlState.RUNNING:
+                raise RuntimeError("agent execution is not running")
+            self._runtime_state = RuntimeControlState.PAUSED
+            self._resume_gate.clear()
+
+    def resume_runtime(self) -> None:
+        with self._runtime_lock:
+            if self._runtime_state is not RuntimeControlState.PAUSED:
+                raise RuntimeError("agent execution is not paused")
+            self._runtime_state = RuntimeControlState.RUNNING
+            self._resume_gate.set()
+
+    def terminate_runtime(self) -> None:
+        with self._runtime_lock:
+            if self._runtime_state not in {
+                RuntimeControlState.RUNNING,
+                RuntimeControlState.PAUSED,
+            }:
+                raise RuntimeError("agent execution is not active")
+            self._terminate_requested.set()
+            self._runtime_state = RuntimeControlState.TERMINATED
+            self._resume_gate.set()
+
+    def runtime_state(self) -> str:
+        with self._runtime_lock:
+            return self._runtime_state.value
+
+    def _begin_runtime(self) -> None:
+        with self._runtime_lock:
+            self._terminate_requested.clear()
+            self._resume_gate.set()
+            self._runtime_state = RuntimeControlState.RUNNING
+
+    def _finish_runtime(self) -> None:
+        with self._runtime_lock:
+            self._runtime_state = (
+                RuntimeControlState.TERMINATED
+                if self._terminate_requested.is_set()
+                else RuntimeControlState.IDLE
+            )
+            self._resume_gate.set()
+
+    def _controlled_step(self, step: WorkflowStep) -> WorkflowStep:
+        def action() -> str:
+            self._resume_gate.wait()
+            if self._terminate_requested.is_set():
+                raise RuntimeError("agent execution was stopped")
+            return step.action()
+
+        return WorkflowStep(
+            operation=step.operation,
+            action=action,
+            risk=step.risk,
+            approval=step.approval,
+            target=step.target,
+            context=step.context,
+            step_id=step.step_id,
+        )
 
     def run(
         self,
@@ -410,12 +484,27 @@ class ApplicationExecutionService:
         if not isinstance(task, TaskModel):
             raise TypeError("task must be a TaskModel")
 
-        workflow_task = TaskService.to_workflow(task)
+        with self._runtime_lock:
+            runtime_started = self._runtime_state in {
+                RuntimeControlState.RUNNING,
+                RuntimeControlState.PAUSED,
+            }
+        if not runtime_started:
+            self._begin_runtime()
 
-        execution = self._agent_service.run(
-            workflow_task,
-            steps,
+        workflow_task = TaskService.to_workflow(task)
+        controlled_steps = tuple(
+            self._controlled_step(step)
+            for step in steps
         )
+
+        try:
+            execution = self._agent_service.run(
+                workflow_task,
+                controlled_steps,
+            )
+        finally:
+            self._finish_runtime()
 
         application_task = TaskModel(
             task_id=execution.task.task_id,

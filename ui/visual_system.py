@@ -16,7 +16,7 @@ from ui.agent_transitions import (
 )
 from ui.animation import AnimationKind, AnimationSpec
 from ui.animation_accessibility import AnimationAccessibility
-from ui.visual_tokens import DEFAULT_VISUAL_TOKENS
+from ui.visual_tokens import DEFAULT_VISUAL_TOKENS, VisualTokens
 
 
 class AgentStage(str, Enum):
@@ -31,6 +31,7 @@ class AgentStage(str, Enum):
 
 class StageEffect(str, Enum):
     REST = "rest"
+    IDLE = "idle"
     FOCUS = "focus"
     READY = "ready"
     RUNNING = "running"
@@ -243,18 +244,29 @@ class _ColorFade:
 
 
 class _StageOutline:
-    _COLORS = {
-        "blue": "#638FF2",
-        "purple": "#8B7CF6",
-        "ready": "#638FF2",
-        "glow": "#39345F",
-        "waiting_dim": "#343149",
-        "success": "#7884F2",
-        "error": "#B85C83",
-    }
-
-    def __init__(self, parent: ttk.Frame, background: str) -> None:
+    def __init__(
+        self,
+        parent: ttk.Frame,
+        background: str,
+        tokens: VisualTokens = DEFAULT_VISUAL_TOKENS,
+    ) -> None:
         self.parent = parent
+        self.tokens = tokens
+        colors = tokens.colors
+        blue = colors.get("accent_blue", colors["accent"])
+        purple = colors.get(
+            "accent_purple",
+            colors.get("agent_running", blue),
+        )
+        self._colors = {
+            "blue": blue,
+            "purple": purple,
+            "ready": blue,
+            "glow": _mix_color(background, purple, 0.42),
+            "waiting_dim": _mix_color(background, purple, 0.22),
+            "success": _mix_color(blue, purple, 0.55),
+            "error": colors["error"],
+        }
         self.canvas = tk.Canvas(
             parent,
             background=background,
@@ -270,6 +282,12 @@ class _StageOutline:
         self.spec = AnimationSpec()
         self._after_id = None
         self._started = 0.0
+        self._pointer_intensity = 0.0
+
+    def set_pointer(self, intensity: float) -> None:
+        self._pointer_intensity = min(max(intensity, 0.0), 0.22)
+        if self.effect not in {StageEffect.RUNNING, StageEffect.WAITING}:
+            self._draw()
 
     def set_effect(self, effect: StageEffect, spec: AnimationSpec) -> None:
         if effect is self.effect:
@@ -287,7 +305,11 @@ class _StageOutline:
 
     def _tick(self) -> None:
         self._draw()
-        if self.effect in {StageEffect.RUNNING, StageEffect.WAITING}:
+        if self.effect in {
+            StageEffect.IDLE,
+            StageEffect.RUNNING,
+            StageEffect.WAITING,
+        }:
             self._after_id = self.parent.after(100, self._tick)
             return
         duration = max(self.spec.duration_ms, 650) / 1000
@@ -302,32 +324,65 @@ class _StageOutline:
         self.canvas.delete("all")
         width = self.canvas.winfo_width()
         height = self.canvas.winfo_height()
-        if width < 8 or height < 8 or self.effect is StageEffect.REST:
+        if width < 8 or height < 8:
+            return
+        if (
+            self.effect is StageEffect.REST
+            and self._pointer_intensity <= 0.01
+        ):
             return
 
         bounds = (1.5, 1.5, width - 1.5, height - 1.5)
-        base = DEFAULT_VISUAL_TOKENS.colors["border"]
+        base = self.tokens.colors["border"]
         self.canvas.create_rectangle(*bounds, outline=base, width=1)
 
-        if self.effect is StageEffect.RUNNING:
+        if self.effect is StageEffect.REST:
+            pointer_color = _mix_color(
+                base,
+                self._colors["blue"],
+                self._pointer_intensity * 0.55,
+            )
+            self.canvas.create_rectangle(
+                *bounds,
+                outline=pointer_color,
+                width=1,
+            )
+        elif self.effect is StageEffect.IDLE:
+            phase = (time.monotonic() - self._started) / 18.0
+            breath = (1 - cos(2 * pi * phase)) / 2
+            color = _mix_color(
+                base,
+                self._colors["blue"],
+                0.08 + breath * 0.10,
+            )
+            self.canvas.create_rectangle(
+                *bounds,
+                outline=color,
+                width=1,
+            )
+        elif self.effect is StageEffect.RUNNING:
             self._draw_running_outline(width, height)
         elif self.effect is StageEffect.READY:
             self.canvas.create_rectangle(
                 *bounds,
-                outline="#344A78",
+                outline=_mix_color(
+                    self.tokens.colors["surface"],
+                    self._colors["blue"],
+                    0.55,
+                ),
                 width=4,
             )
             self.canvas.create_rectangle(
                 *bounds,
-                outline=self._COLORS["ready"],
+                outline=self._colors["ready"],
                 width=1,
             )
         elif self.effect is StageEffect.WAITING:
             phase = (time.monotonic() - self._started) / 5.2
             breath = (1 - cos(2 * pi * phase)) / 2
             color = _mix_color(
-                self._COLORS["waiting_dim"],
-                self._COLORS["purple"],
+                self._colors["waiting_dim"],
+                self._colors["purple"],
                 0.25 + breath * 0.55,
             )
             self.canvas.create_rectangle(
@@ -336,13 +391,13 @@ class _StageOutline:
                 width=2,
             )
         elif self.effect is StageEffect.SUCCESS:
-            self._draw_fade(self._COLORS["success"])
+            self._draw_fade(self._colors["success"])
         elif self.effect is StageEffect.ERROR:
-            self._draw_fade(self._COLORS["error"])
+            self._draw_fade(self._colors["error"])
         else:
             self.canvas.create_rectangle(
                 *bounds,
-                outline=self._COLORS["purple"],
+                outline=self._colors["purple"],
                 width=2,
             )
 
@@ -351,7 +406,7 @@ class _StageOutline:
         progress = min((time.monotonic() - self._started) / duration, 1.0)
         softened = _mix_color(
             color,
-            DEFAULT_VISUAL_TOKENS.colors["surface"],
+            self.tokens.colors["surface"],
             progress,
         )
         width = self.canvas.winfo_width()
@@ -391,7 +446,7 @@ class _StageOutline:
         coordinates = [coordinate for point in points for coordinate in point]
         self.canvas.create_line(
             *coordinates,
-            fill=self._COLORS["glow"],
+            fill=self._colors["glow"],
             width=6,
             capstyle=tk.ROUND,
         )
@@ -399,8 +454,8 @@ class _StageOutline:
             zip(points, points[1:])
         ):
             color = _mix_color(
-                self._COLORS["blue"],
-                self._COLORS["purple"],
+                self._colors["blue"],
+                self._colors["purple"],
                 index / max(len(points) - 2, 1),
             )
             self.canvas.create_line(
@@ -453,21 +508,31 @@ class AgentPanelVisualSystem:
         root: tk.Misc,
         frames: dict[AgentStage, ttk.Frame],
         titles: dict[AgentStage, ttk.Label],
+        *,
+        tokens: VisualTokens = DEFAULT_VISUAL_TOKENS,
+        accessibility: AnimationAccessibility | None = None,
     ) -> None:
-        self.model = AgentVisualSystem()
+        self.model = AgentVisualSystem(accessibility)
         self.style = ttk.Style(root)
-        self.background = DEFAULT_VISUAL_TOKENS.colors["surface"]
-        self.muted = DEFAULT_VISUAL_TOKENS.colors["text_muted"]
-        self.focus = _StageOutline._COLORS["blue"]
+        self.tokens = tokens
+        self.colors = tokens.colors
+        self.background = self.colors["surface_elevated"]
+        self.muted = self.colors["text_muted"]
+        self.focus = self.colors.get("accent_blue", self.colors["accent"])
         self.style.configure(
             "PacePilot.M25Stage.TFrame",
             background=self.background,
         )
         self.outlines: dict[AgentStage, _StageOutline] = {}
         self.title_fades: dict[AgentStage, _ColorFade] = {}
+        self.idle_outline = _StageOutline(root, self.background, self.tokens)
         for stage, frame in frames.items():
             frame.configure(style="PacePilot.M25Stage.TFrame")
-            self.outlines[stage] = _StageOutline(frame, self.background)
+            self.outlines[stage] = _StageOutline(
+                frame,
+                self.background,
+                self.tokens,
+            )
         for stage, title in titles.items():
             style_name = f"PacePilot.M25Stage{id(title)}.TLabel"
             self.style.configure(
@@ -489,6 +554,12 @@ class AgentPanelVisualSystem:
     def render(self, state: AgentInteractionState) -> AgentVisualTransition:
         transition = self.model.transition(self.previous, state)
         target = transition.target
+        self.idle_outline.set_effect(
+            StageEffect.IDLE
+            if target.stage is AgentStage.IDLE
+            else StageEffect.REST,
+            transition.animation,
+        )
         for stage, outline in self.outlines.items():
             effect = (
                 target.effect
@@ -498,7 +569,10 @@ class AgentPanelVisualSystem:
             outline.set_effect(effect, transition.animation)
 
         title_color = (
-            _StageOutline._COLORS["purple"]
+            self.colors.get(
+                "accent_purple",
+                self.colors.get("agent_running", self.focus),
+            )
             if target.effect in {StageEffect.WAITING, StageEffect.SUCCESS}
             else self.focus
         )
@@ -510,6 +584,11 @@ class AgentPanelVisualSystem:
 
         self.previous = target
         return transition
+
+    def set_pointer(self, stage: AgentStage, intensity: float) -> None:
+        outline = self.outlines.get(stage)
+        if outline is not None:
+            outline.set_pointer(intensity)
 
 
 def _mix_color(start: str, end: str, ratio: float) -> str:

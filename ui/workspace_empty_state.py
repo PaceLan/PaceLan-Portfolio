@@ -7,26 +7,21 @@ import time
 import tkinter as tk
 
 from ui.animation_accessibility import AnimationAccessibility
+from ui.visual_tokens import DEFAULT_VISUAL_TOKENS, VisualTokens
 
 
 class WorkspaceEmptyState(tk.Canvas):
     """Show project-aware empty-state copy over a restrained cool backdrop."""
 
-    _TOP = "#101521"
-    _MID = "#17182C"
-    _BOTTOM = "#10151F"
-    _TEXT = "#D8DEEB"
-    _MUTED = "#7F8BA7"
-    _ACCENT = "#7485C7"
-
     def __init__(
         self,
         parent,
         accessibility: AnimationAccessibility | None = None,
+        tokens: VisualTokens = DEFAULT_VISUAL_TOKENS,
     ) -> None:
         super().__init__(
             parent,
-            background=self._TOP,
+            background=tokens.colors["background"],
             highlightthickness=0,
             borderwidth=0,
             takefocus=0,
@@ -34,9 +29,27 @@ class WorkspaceEmptyState(tk.Canvas):
         self._project_open = False
         self._agent_active = False
         self.accessibility = accessibility or AnimationAccessibility()
+        self.colors = tokens.colors
+        self.top_color = self.colors["background"]
+        self.middle_color = _mix_color(
+            self.colors["surface"],
+            self.colors.get("accent_purple", self.colors["accent"]),
+            0.10,
+        )
+        self.bottom_color = self.colors["surface"]
+        self.text_color = self.colors["text"]
+        self.muted_color = self.colors["text_muted"]
+        self.accent_color = self.colors.get(
+            "accent_blue",
+            self.colors["accent"],
+        )
         self._ambient_started = time.monotonic()
         self._ambient_after = None
         self._caption_item = None
+        self._pointer_items: tuple[int, ...] | None = None
+        self._pointer_x = 0
+        self._pointer_y = 0
+        self._pointer_intensity = 0.0
         self.bind("<Configure>", self._draw)
         self.bind("<Destroy>", self._on_destroy, add="+")
         self._draw()
@@ -55,10 +68,19 @@ class WorkspaceEmptyState(tk.Canvas):
         if active:
             self._cancel_ambient()
             if self._caption_item is not None:
-                self.itemconfigure(self._caption_item, fill=self._MUTED)
+                self.itemconfigure(self._caption_item, fill=self.muted_color)
         else:
             self._ambient_started = time.monotonic()
             self._schedule_ambient()
+
+    def set_pointer_visual(self, x: int, y: int, intensity: float) -> None:
+        self._pointer_x = x
+        self._pointer_y = y
+        self._pointer_intensity = min(max(intensity, 0.0), 0.22)
+        if self._pointer_items is None:
+            self._draw()
+            return
+        self._update_pointer_items()
 
     def _draw(self, _event=None) -> None:
         width = self.winfo_width()
@@ -68,6 +90,7 @@ class WorkspaceEmptyState(tk.Canvas):
 
         self.delete("all")
         self._caption_item = None
+        self._pointer_items = None
         band_count = min(max(height // 8, 20), 72)
         for index in range(band_count):
             top = index / band_count
@@ -82,19 +105,21 @@ class WorkspaceEmptyState(tk.Canvas):
                 outline=color,
             )
 
+        self._create_pointer_items()
+
         self.create_line(
             width * 0.12,
             height * 0.39,
             width * 0.88,
             height * 0.39,
-            fill="#20253A",
+            fill=self.colors["border"],
             width=1,
         )
         self.create_text(
             width / 2,
             height * 0.44,
             text="PACEPILOT  /  WORKSPACE",
-            fill=self._MUTED,
+            fill=self.muted_color,
             font=("TkDefaultFont", 9, "bold"),
         )
         self.create_text(
@@ -105,7 +130,7 @@ class WorkspaceEmptyState(tk.Canvas):
                 if self._project_open
                 else "Open a project to begin"
             ),
-            fill=self._TEXT,
+            fill=self.text_color,
             font=("TkDefaultFont", 17, "normal"),
         )
         self._caption_item = self.create_text(
@@ -116,14 +141,79 @@ class WorkspaceEmptyState(tk.Canvas):
                 if self._project_open
                 else "Your project workspace will appear here."
             ),
-            fill=self._MUTED,
+            fill=self.muted_color,
             font=("TkDefaultFont", 10, "normal"),
         )
 
     def _background_color(self, position: float) -> str:
         if position < 0.5:
-            return _mix_color(self._TOP, self._MID, position * 2)
-        return _mix_color(self._MID, self._BOTTOM, (position - 0.5) * 2)
+            return _mix_color(self.top_color, self.middle_color, position * 2)
+        return _mix_color(
+            self.middle_color,
+            self.bottom_color,
+            (position - 0.5) * 2,
+        )
+
+    def _create_pointer_items(self) -> None:
+        width = self.winfo_width()
+        height = self.winfo_height()
+        radius_x = max(50, min(width * 0.24, 240))
+        radius_y = max(45, min(height * 0.30, 180))
+        background = self._background_color(
+            self._pointer_y / max(height, 1)
+        )
+        ratios = (0.18, 0.11, 0.06)
+        self._pointer_items = tuple(
+            self.create_oval(
+                0,
+                0,
+                0,
+                0,
+                fill=_mix_color(
+                    background,
+                    self.accent_color,
+                    self._pointer_intensity * ratio,
+                ),
+                outline="",
+                state=tk.HIDDEN,
+                stipple=stipple,
+            )
+            for ratio, stipple in zip(ratios, ("gray12", "gray25", "gray50"))
+        )
+        self._update_pointer_items()
+
+    def _update_pointer_items(self) -> None:
+        if self._pointer_items is None:
+            return
+        width = self.winfo_width()
+        height = self.winfo_height()
+        radius_x = max(50, min(width * 0.24, 240))
+        radius_y = max(45, min(height * 0.30, 180))
+        position = self._pointer_y / max(height, 1)
+        background = self._background_color(position)
+        for index, ratio in enumerate((0.18, 0.11, 0.06)):
+            item = self._pointer_items[index]
+            self.coords(
+                item,
+                self._pointer_x - radius_x,
+                self._pointer_y - radius_y,
+                self._pointer_x + radius_x,
+                self._pointer_y + radius_y,
+            )
+            color = _mix_color(
+                background,
+                self.accent_color,
+                self._pointer_intensity * ratio,
+            )
+            self.itemconfigure(
+                item,
+                fill=color,
+                state=(
+                    tk.NORMAL
+                    if self._pointer_intensity > 0.01
+                    else tk.HIDDEN
+                ),
+            )
 
     def _schedule_ambient(self) -> None:
         if (
@@ -136,13 +226,16 @@ class WorkspaceEmptyState(tk.Canvas):
 
     def _animate_ambient(self) -> None:
         self._ambient_after = None
-        if self._agent_active or self._caption_item is None:
+        if self._agent_active or self.accessibility.reduced_motion:
+            return
+        if self._caption_item is None:
+            self._schedule_ambient()
             return
         phase = (time.monotonic() - self._ambient_started) / 12.0
         pulse = (1 - cos(2 * pi * phase)) / 2
         self.itemconfigure(
             self._caption_item,
-            fill=_mix_color(self._MUTED, self._ACCENT, pulse * 0.35),
+            fill=_mix_color(self.muted_color, self.accent_color, pulse * 0.35),
         )
         self._schedule_ambient()
 

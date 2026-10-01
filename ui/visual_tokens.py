@@ -10,19 +10,22 @@ class VisualTokens:
     """Immutable visual language foundation shared by UI implementations."""
 
     colors: Mapping[str, str] = MappingProxyType({
-        "background": "#0F1115",
-        "surface": "#171A21",
-        "surface_elevated": "#1E222B",
-        "text": "#F2F4F7",
-        "text_secondary": "#A7AFBC",
-        "text_muted": "#737C8A",
-        "border": "#303641",
+        "background": "#0B0F17",
+        "surface": "#121722",
+        "surface_elevated": "#1A2030",
+        "text": "#E8ECF5",
+        "text_secondary": "#929DB2",
+        "text_muted": "#6F7B93",
+        "border": "#28334A",
         "accent": "#5B8DEF",
-        "info": "#4FA3FF",
+        "accent_blue": "#5B8DEF",
+        "accent_purple": "#8B7CF6",
+        "info": "#79A9FF",
         "success": "#45C486",
         "warning": "#E6B450",
         "error": "#E05A67",
         "agent_running": "#8B7CF6",
+        "agent_waiting": "#746CE0",
     })
 
     typography: Mapping[str, object] = MappingProxyType({

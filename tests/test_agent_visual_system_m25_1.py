@@ -1,5 +1,6 @@
 import unittest
 import tkinter as tk
+from tkinter import ttk
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
@@ -38,6 +39,7 @@ from ui.visual_system import (
     AgentVisualSystem,
     StageEffect,
 )
+from ui.pointer_visuals import PointerVisualLayer
 from ui.workspace_empty_state import WorkspaceEmptyState
 
 
@@ -397,11 +399,230 @@ class M251ReducedMotionTests(unittest.TestCase):
 
         self.assertTrue(accessibility.reduced_motion)
         self.assertIsNone(empty_state._ambient_after)
-
         empty_state.set_agent_active(True)
         empty_state.set_agent_active(False)
-
         self.assertIsNone(empty_state._ambient_after)
+
+
+class M251ShellVisualFoundationTests(unittest.TestCase):
+    def setUp(self):
+        self.root = tk.Tk()
+        self.root.withdraw()
+
+    def tearDown(self):
+        self.root.destroy()
+
+    def test_entire_empty_shell_uses_the_shared_cold_palette(self):
+        app = CodingAssistantApp(self.root)
+        self.root.update_idletasks()
+        tokens = app.composition.tokens
+        style = ttk.Style(self.root)
+
+        self.assertEqual(style.theme_use(), "clam")
+        self.assertEqual(self.root.title(), "PacePilot")
+        self.assertEqual(self.root.cget("background"), tokens.colors["background"])
+        self.assertEqual(
+            app.project_panel.cget("style"),
+            "PacePilot.Panel.TLabelframe",
+        )
+        self.assertEqual(
+            app.workspace_panel.cget("style"),
+            "PacePilot.Panel.TLabelframe",
+        )
+        self.assertEqual(
+            app.agent_panel.cget("style"),
+            "PacePilot.Panel.TLabelframe",
+        )
+        self.assertEqual(
+            app.content_pane.cget("style"),
+            "PacePilot.TPanedwindow",
+        )
+        self.assertEqual(
+            app.open_project_button.cget("style"),
+            "PacePilot.Primary.TButton",
+        )
+        self.assertIn(
+            str(app.icons.image("folder")),
+            str(app.open_project_button.cget("image")),
+        )
+        self.assertIn(
+            str(app.icons.image("folder")),
+            str(app.project_heading.cget("image")),
+        )
+        self.assertIn(
+            str(app.icons.image("workspace")),
+            str(app.workspace_heading.cget("image")),
+        )
+        self.assertIn(
+            str(app.icons.image("agent")),
+            str(app.agent_panel.heading_label.cget("image")),
+        )
+        self.assertTrue(
+            all(
+                (app.icons.image(name).width(), app.icons.image(name).height())
+                == (16, 16)
+                for name in app.icons.names()
+            )
+        )
+        self.assertNotEqual(
+            style.lookup("PacePilot.Primary.TButton", "background"),
+            tokens.colors["accent_blue"],
+        )
+        self.assertEqual(
+            app.project_context_label.cget("text"),
+            "No project open",
+        )
+        self.assertEqual(
+            app.file_viewer.cget("background"),
+            tokens.colors["surface"],
+        )
+        self.assertEqual(
+            app.agent_panel.plan_steps.cget("background"),
+            tokens.colors["surface"],
+        )
+        for listbox in (
+            app.agent_panel.plan_steps,
+            app.agent_panel.risk_approval_steps,
+            app.agent_panel.execution_steps,
+            app.agent_panel.history_entries,
+        ):
+            self.assertEqual(
+                listbox.cget("background"),
+                tokens.colors["surface"],
+            )
+        self.assertEqual(
+            style.lookup("PacePilot.M25Stage.TFrame", "background"),
+            tokens.colors["surface_elevated"],
+        )
+        for stage, icon_name in (
+            (AgentStage.TASK, "task"),
+            (AgentStage.UNDERSTANDING, "understanding"),
+            (AgentStage.PLAN, "plan"),
+            (AgentStage.APPROVAL, "approval"),
+            (AgentStage.EXECUTION, "execution"),
+            (AgentStage.RESULT, "result"),
+        ):
+            self.assertIn(
+                str(app.icons.image(icon_name)),
+                str(app.agent_panel._stage_titles[stage].cget("image")),
+            )
+        self.assertEqual(
+            app.empty_state.cget("background"),
+            tokens.colors["background"],
+        )
+        self.assertEqual(
+            app.agent_panel.visual_system.idle_outline.effect,
+            StageEffect.IDLE,
+        )
+        self.assertIsNotNone(app.agent_panel.visual_system.idle_outline._after_id)
+        self.assertIsNotNone(app.empty_state._ambient_after)
+        self.assertIsNone(app.controller.project_context.path)
+
+    def test_shared_reduced_motion_freezes_idle_shell_animations(self):
+        accessibility = AnimationAccessibility(
+            MotionPolicy(mode=MotionMode.REDUCED)
+        )
+        app = CodingAssistantApp(
+            self.root,
+            accessibility=accessibility,
+        )
+
+        self.assertIsNone(app.empty_state._ambient_after)
+        self.assertIsNone(app.agent_panel.visual_system.idle_outline._after_id)
+        self.assertTrue(accessibility.reduced_motion)
+
+    def test_pointer_motion_uses_tk_loop_and_focus_loss_clears_glow(self):
+        self.root.deiconify()
+        self.root.geometry("1000x700")
+        app = CodingAssistantApp(self.root)
+        self.root.focus_force()
+        self.root.update()
+        layer = app.pointer_layer
+
+        self.assertTrue(layer.enabled)
+        self.assertTrue(layer.focused)
+        self.assertIn(str(app.header_frame), layer._surfaces)
+        self.assertIn(str(app.project_panel), layer._surfaces)
+        self.assertIn(str(app.workspace_panel), layer._surfaces)
+        self.assertIn(str(app.agent_panel), layer._surfaces)
+        self.assertIn(str(app.empty_state), layer._surfaces)
+        self.assertIn(str(app.tree_view), layer._surfaces)
+
+        app.empty_state.event_generate(
+            "<Motion>",
+            x=max(1, app.empty_state.winfo_width() // 2),
+            y=max(1, app.empty_state.winfo_height() // 2),
+            warp=True,
+        )
+        self.assertIsNotNone(layer._after_id)
+        self.root.after(100, self.root.quit)
+        self.root.mainloop()
+
+        self.assertGreater(app.empty_state._pointer_intensity, 0)
+        self.assertIsNotNone(app.empty_state._pointer_items)
+        self.root.event_generate("<FocusOut>")
+        self.root.update()
+        self.assertFalse(layer.focused)
+        self.assertEqual(app.empty_state._pointer_intensity, 0)
+
+    def test_reduced_motion_disables_pointer_bindings_and_dispatch(self):
+        accessibility = AnimationAccessibility(
+            MotionPolicy(mode=MotionMode.REDUCED)
+        )
+        app = CodingAssistantApp(
+            self.root,
+            accessibility=accessibility,
+        )
+
+        self.assertFalse(app.pointer_layer.enabled)
+        self.assertIsNone(app.pointer_layer._after_id)
+        self.assertIsNone(app.empty_state._ambient_after)
+
+    def test_pointer_highlight_is_local_to_primary_and_agent_surfaces(self):
+        self.root.deiconify()
+        self.root.geometry("1000x700")
+        app = CodingAssistantApp(self.root)
+        self.root.focus_force()
+        self.root.update()
+
+        app.open_project_button.event_generate(
+            "<Motion>",
+            x=4,
+            y=4,
+            warp=True,
+        )
+        self.root.after(100, self.root.quit)
+        self.root.mainloop()
+
+        self.assertIn("Pointer", app.open_project_button.cget("style"))
+        self.assertEqual(
+            app.project_panel.cget("style"),
+            "PacePilot.Panel.TLabelframe",
+        )
+
+        task_heading = app.agent_panel._stage_titles[AgentStage.TASK]
+        task_heading.event_generate(
+            "<Motion>",
+            x=4,
+            y=4,
+            warp=True,
+        )
+        self.root.after(100, self.root.quit)
+        self.root.mainloop()
+
+        self.assertIsNotNone(app.pointer_layer._current)
+        self.assertEqual(
+            app.pointer_layer._current.widget,
+            app.agent_panel._stage_frames[AgentStage.TASK],
+        )
+        self.assertGreater(
+            app.agent_panel.visual_system.outlines[AgentStage.TASK]._pointer_intensity,
+            0,
+        )
+        self.assertEqual(
+            app.agent_panel.visual_system.outlines[AgentStage.PLAN].effect,
+            StageEffect.REST,
+        )
 
 
 if __name__ == "__main__":

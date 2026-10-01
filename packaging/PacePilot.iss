@@ -1,6 +1,9 @@
 #define ProductName "PacePilot"
 #define ProductVersion "1.0.0"
 #define ProductExe "PacePilot.exe"
+#ifndef ProductDist
+#define ProductDist "..\dist\PacePilot"
+#endif
 
 [Setup]
 AppId={{A50DBE0F-3627-4A5F-9C35-D1505CF034CB}
@@ -25,7 +28,7 @@ VersionInfoVersion=1.0.0.0
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
 [Files]
-Source: "..\dist\PacePilot\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ProductDist}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#ProductName}"; Filename: "{app}\{#ProductExe}"

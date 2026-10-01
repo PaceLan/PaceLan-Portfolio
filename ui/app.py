@@ -7,10 +7,13 @@ from application.workspace import ApplicationTreeNode
 from ui.controller import ApplicationController
 from ui.agent_panel import AgentInteractionPanel
 from ui.agent_state import AgentInteractionState
-from ui.visual_system import AgentVisualSystem, StageEffect
+from ui.animation_accessibility import AnimationAccessibility
+from ui.visual_system import AgentStage, AgentVisualSystem
 from ui.visual_composition import DEFAULT_UX_COMPOSITION, UXComposition
 from ui.visual_layout import WorkspaceLayout
 from ui.visual_renderer import VisualRenderer
+from ui.visual_icons import VisualIconSet
+from ui.pointer_visuals import PointerVisualLayer
 from ui.workspace_empty_state import WorkspaceEmptyState
 from ui.workspace_state import (
     SelectedFile,
@@ -55,20 +58,24 @@ class CodingAssistantApp:
         layout: Optional[WorkspaceLayout] = None,
         composition: Optional[UXComposition] = None,
         agent_service=None,
+        accessibility: Optional[AnimationAccessibility] = None,
     ) -> None:
         self.root = root
         self.controller = controller or ApplicationController(
             agent_service=agent_service,
         )
         self.composition = composition or DEFAULT_UX_COMPOSITION
+        self.accessibility = accessibility or AnimationAccessibility()
+        self.icons = VisualIconSet(root, self.composition.tokens)
         self.layout = layout or self.composition.layout
         self.visual_renderer = VisualRenderer(root, self.composition)
 
-        self.root.title("Coding Assistant")
+        self.root.title("PacePilot")
         self.root.minsize(800, 500)
         self._tree_paths: dict[str, tuple[str, bool]] = {}
         self.workspace_state = self.controller.initial_state()
         self._build_layout()
+        self._build_pointer_layer()
 
         if project_root is not None:
             self.controller.open_project(project_root)
@@ -84,11 +91,15 @@ class CodingAssistantApp:
         self._build_header()
 
         content = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
+        self.content_pane = content
+        self.visual_renderer.apply_panedwindow(content)
         content.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
         navigation = self._build_navigation(content)
         main_content = self._build_main_workspace(content)
         agent_panel = self._build_agent_panel(content)
+        self.project_panel = navigation
+        self.workspace_panel = main_content
 
         content.add(navigation, weight=1)
         content.add(main_content, weight=3)
@@ -98,30 +109,130 @@ class CodingAssistantApp:
 
     def _build_header(self) -> None:
         header = ttk.Frame(self.root, padding=(12, 10))
+        self.header_frame = header
+        self.visual_renderer.apply_header_frame(header)
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
+        header.columnconfigure(1, weight=2)
 
         title = ttk.Label(
             header,
-            text="Coding Assistant",
+            text="PacePilot",
+            image=self.icons.image("brand"),
+            compound=tk.LEFT,
         )
         title.grid(row=0, column=0, sticky="w")
         self.visual_renderer.apply_header(title)
 
+        self.project_context_label = ttk.Label(
+            header,
+            text="No project open",
+            anchor="w",
+        )
+        self.project_context_label.grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            padx=(20, 12),
+        )
+        self.visual_renderer.apply_header_context(self.project_context_label)
+
         self.open_project_button = ttk.Button(
             header,
             text="Open Project",
+            image=self.icons.image("folder"),
+            compound=tk.LEFT,
             command=self._choose_project,
         )
-        self.open_project_button.grid(row=0, column=1, sticky="e")
+        self.visual_renderer.apply_primary_action(self.open_project_button)
+        self.open_project_button.grid(row=0, column=2, sticky="e")
+
+    def _build_pointer_layer(self) -> None:
+        self.pointer_layer = PointerVisualLayer(
+            self.root,
+            accessibility=self.accessibility,
+        )
+        renderer = self.visual_renderer
+        for surface in (
+            self.header_frame,
+            self.project_panel,
+            self.workspace_panel,
+            self.agent_panel,
+            self.open_project_button,
+        ):
+            self.pointer_layer.register(
+                surface,
+                lambda _x, _y, amount, target=surface: (
+                    renderer.apply_pointer_surface(target, amount)
+                ),
+            )
+        self.pointer_layer.register(
+            self.empty_state,
+            self.empty_state.set_pointer_visual,
+        )
+        self.pointer_layer.register(
+            self.file_viewer,
+            lambda _x, _y, amount: renderer.apply_pointer_text(
+                self.file_viewer,
+                amount,
+            ),
+        )
+        self.pointer_layer.register(
+            self.tree_view,
+            self._set_project_tree_pointer,
+        )
+        for stage, frame in self.agent_panel._stage_frames.items():
+            self.pointer_layer.register(
+                frame,
+                lambda _x, _y, amount, target_stage=stage: (
+                    self.agent_panel.visual_system.set_pointer(
+                        target_stage,
+                        amount,
+                    )
+                ),
+            )
+
+    def _set_project_tree_pointer(
+        self,
+        _x: int,
+        y: int,
+        intensity: float,
+    ) -> None:
+        row = self.tree_view.identify_row(y) if intensity > 0.01 else ""
+        previous = getattr(self, "_pointer_tree_item", None)
+        if previous and previous != row:
+            tags = tuple(
+                tag
+                for tag in self.tree_view.item(previous, "tags")
+                if tag != "pointer-hover"
+            )
+            self.tree_view.item(previous, tags=tags)
+        self._pointer_tree_item = row or None
+        if row:
+            tags = tuple(self.tree_view.item(row, "tags"))
+            if "pointer-hover" not in tags:
+                self.tree_view.item(row, tags=tags + ("pointer-hover",))
 
     def _build_navigation(self, parent: ttk.Panedwindow) -> ttk.LabelFrame:
-        navigation = ttk.LabelFrame(parent, text="Project", padding=8)
+        navigation = ttk.LabelFrame(parent, text="", padding=8)
+        self.project_heading = ttk.Label(
+            navigation,
+            text="Project",
+            image=self.icons.image("folder"),
+            compound=tk.LEFT,
+            style="PacePilot.Panel.TLabelframe.Label",
+        )
+        navigation.configure(labelwidget=self.project_heading)
         navigation.columnconfigure(0, weight=1)
         navigation.rowconfigure(0, weight=1)
         self.visual_renderer.apply_navigation(navigation)
 
         self.tree_view = ttk.Treeview(navigation, show="tree")
+        self.tree_view.tag_configure(
+            "pointer-hover",
+            background=self.composition.tokens.colors["surface_elevated"],
+            foreground=self.composition.tokens.colors["text"],
+        )
         self.tree_view.grid(row=0, column=0, sticky="nsew")
         self.tree_view.bind("<<TreeviewSelect>>", self._on_tree_selection)
         self.visual_renderer.apply_tree(self.tree_view)
@@ -140,7 +251,15 @@ class CodingAssistantApp:
         self,
         parent: ttk.Panedwindow,
     ) -> ttk.LabelFrame:
-        main_content = ttk.LabelFrame(parent, text="Workspace", padding=16)
+        main_content = ttk.LabelFrame(parent, text="", padding=16)
+        self.workspace_heading = ttk.Label(
+            main_content,
+            text="Workspace",
+            image=self.icons.image("workspace"),
+            compound=tk.LEFT,
+            style="PacePilot.Panel.TLabelframe.Label",
+        )
+        main_content.configure(labelwidget=self.workspace_heading)
         main_content.columnconfigure(0, weight=1)
         main_content.rowconfigure(1, weight=1)
         self.visual_renderer.apply_workspace(main_content)
@@ -174,7 +293,11 @@ class CodingAssistantApp:
         self.file_scrollbar.grid(row=1, column=1, sticky="ns")
         self.file_viewer.configure(yscrollcommand=self.file_scrollbar.set)
 
-        self.empty_state = WorkspaceEmptyState(main_content)
+        self.empty_state = WorkspaceEmptyState(
+            main_content,
+            accessibility=self.accessibility,
+            tokens=self.composition.tokens,
+        )
         self.empty_state.grid(row=1, column=0, sticky="nsew")
         self.file_viewer.grid_remove()
         self.file_scrollbar.grid_remove()
@@ -189,6 +312,8 @@ class CodingAssistantApp:
             parent,
             self.controller.agent_state,
             composition=self.composition,
+            accessibility=self.accessibility,
+            icons=self.icons,
         )
         self.agent_panel.set_history_selection_callback(
             self._on_agent_history_selected
@@ -201,15 +326,7 @@ class CodingAssistantApp:
     ) -> AgentInteractionState:
         self.agent_panel.render(state)
         projection = AgentVisualSystem.project(state)
-        self.empty_state.set_agent_active(
-            projection.effect
-            in {
-                StageEffect.RUNNING,
-                StageEffect.WAITING,
-                StageEffect.SUCCESS,
-                StageEffect.ERROR,
-            }
-        )
+        self.empty_state.set_agent_active(projection.stage is not AgentStage.IDLE)
         return state
 
     def _on_agent_history_selected(self, run_id: str) -> None:
@@ -249,6 +366,9 @@ class CodingAssistantApp:
         )
         self.empty_state.set_project_open(True)
         self.file_path_label.configure(text="No file selected")
+        self.project_context_label.configure(
+            text=self.controller.project_context.name or "Open Project"
+        )
         self.status_label.configure(text=self.workspace_state.status)
 
     def _choose_project(self) -> None:
@@ -277,7 +397,13 @@ class CodingAssistantApp:
         return node.path.suffix.casefold() not in cls._IGNORED_PROJECT_SUFFIXES
 
     def _insert_tree_node(self, parent: str, node: ApplicationTreeNode) -> str:
-        item_id = self.tree_view.insert(parent, "end", text=node.name, open=True)
+        item_id = self.tree_view.insert(
+            parent,
+            "end",
+            text=node.name,
+            image=self.icons.image("folder" if node.is_directory else "file"),
+            open=True,
+        )
         project_path = self.controller.project_context.path
         relative_path = "."
         if project_path is not None:
