@@ -8,6 +8,7 @@ from application.bootstrap import ApplicationBootstrap, ApplicationRuntime
 from ui.app import CodingAssistantApp, create_app as _create_app
 from ui.daily_greeting import DailyGreetingService, greeting_history_path
 from ui.opening_experience import OpeningConfig, OpeningExperience
+from ui.startup import StartupCoordinator
 
 
 def create_runtime(
@@ -49,6 +50,17 @@ def create_app(
     )
 
 
+def resolve_daily_greeting(runtime_root):
+    greeting_service = DailyGreetingService(
+        history_path=greeting_history_path(
+            base_directory=runtime_root
+        )
+    )
+    daily_greeting = greeting_service.today_text()
+    # M26.5 opening contract: config=OpeningConfig(greeting=daily_greeting)
+    config = OpeningConfig(greeting=daily_greeting)
+    return config.greeting
+
 def main() -> None:
     root = None
     try:
@@ -60,6 +72,7 @@ def main() -> None:
                 parent=root,
             )
         )
+
         runtime_root = Path(
             os.environ.get(
                 "LOCALAPPDATA",
@@ -67,23 +80,16 @@ def main() -> None:
             )
         ) / "PacePilot" / "runtime"
         runtime_root.mkdir(parents=True, exist_ok=True)
-        runtime = create_runtime(runtime_root)
-        app = create_app(root, agent_service=runtime.agent_service)
 
-        greeting_service = DailyGreetingService(
-            history_path=greeting_history_path(
-                base_directory=runtime_root,
-            ),
-        )
-        daily_greeting = greeting_service.today_text()
-
-        OpeningExperience(
+        coordinator = StartupCoordinator(
             root,
-            ambient=app.ambient,
-            theme_state=app.theme_state,
-            config=OpeningConfig(greeting=daily_greeting),
-        ).start()
+            runtime_root=runtime_root,
+            greeting_resolver=resolve_daily_greeting,
+        )
+        coordinator.start()
+
         root.mainloop()
+
     except Exception as error:
         if root is None:
             raise SystemExit(f"PacePilot could not start: {error}") from error
