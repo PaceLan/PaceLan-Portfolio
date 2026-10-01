@@ -10,6 +10,7 @@ from ui.agent_panel import AgentInteractionPanel
 from ui.agent_state import AgentInteractionState
 from ui.animation_accessibility import AnimationAccessibility
 from ui.ambient_effects import AmbientFieldController
+from ui.unified_transition import UnifiedTransitionController, UnifiedTransitionKind
 from ui.visual_system import AgentStage, AgentVisualSystem
 from ui.visual_composition import DEFAULT_UX_COMPOSITION, UXComposition
 from ui.visual_layout import WorkspaceLayout
@@ -59,6 +60,7 @@ class CodingAssistantApp:
         self.visual_renderer = VisualRenderer(root, self.composition)
         self.theme_state = ThemeState()
         self.ambient = AmbientFieldController()
+        self.transition_controller = UnifiedTransitionController()
 
         self.root.title("PacePilot")
         self.root.minsize(800, 500)
@@ -234,6 +236,12 @@ class CodingAssistantApp:
         self.open_project_button.grid(row=0, column=3, sticky="e")
 
     def _toggle_theme(self) -> None:
+        self.transition_controller.start(
+            UnifiedTransitionKind.THEME,
+            "theme",
+        )
+        self.transition_controller.enter()
+
         self.theme_state = self.theme_state.toggled()
         self.visual_renderer.apply_theme(self.theme_state)
         palette = self.theme_state.palette
@@ -246,6 +254,7 @@ class CodingAssistantApp:
         )
 
         self._render_ambient()
+        self.transition_controller.complete()
 
     def _build_pointer_layer(self) -> None:
         self.pointer_layer = PointerVisualLayer(
@@ -389,9 +398,16 @@ class CodingAssistantApp:
         return self.agent_panel
 
     def _render_agent_state(self, state: AgentInteractionState) -> AgentInteractionState:
+        self.transition_controller.start(
+            UnifiedTransitionKind.GREETING,
+            "agent",
+        )
+        self.transition_controller.enter()
+
         self.agent_panel.render(state)
         projection = AgentVisualSystem.project(state)
         self.empty_state.set_agent_active(projection.stage is not AgentStage.IDLE)
+        self.transition_controller.complete()
         return state
 
     def _on_agent_history_selected(self, run_id: str) -> None:
@@ -440,10 +456,17 @@ class CodingAssistantApp:
         if not project_path:
             return
         try:
+            self.transition_controller.start(
+                UnifiedTransitionKind.WORKSPACE,
+                "workspace",
+            )
+            self.transition_controller.enter()
+
             self.controller.open_project(project_path)
             self._set_project_state()
             self._load_project_tree()
             self.status_label.configure(text="Project loaded")
+            self.transition_controller.complete()
         except (OSError, ValueError) as error:
             self.status_label.configure(text=f"Unable to open project: {error}")
 
