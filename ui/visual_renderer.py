@@ -5,6 +5,7 @@ from tkinter import ttk
 
 from .visual_composition import UXComposition
 from .visual_semantic_mapper import VisualSemanticMapper
+from .theme import ThemePalette, ThemeState
 
 
 class VisualRenderer:
@@ -17,6 +18,7 @@ class VisualRenderer:
         self.style = ttk.Style(root)
         self.semantic_mapper = VisualSemanticMapper()
         self.colors = self.tokens.colors
+        self.theme_state = ThemeState()
         self.accent_blue = self.colors.get(
             "accent_blue",
             self.colors["accent"],
@@ -27,6 +29,7 @@ class VisualRenderer:
         )
         self._pointer_widget_styles: dict[str, tuple[object, str, str]] = {}
         self._pointer_text_colors: dict[str, tuple[object, str]] = {}
+        self._ambient_surfaces: dict[str, tuple[object, str]] = {}
 
         if "clam" in self.style.theme_names():
             self.style.theme_use("clam")
@@ -35,7 +38,71 @@ class VisualRenderer:
             toplevel.configure(background=self.colors["background"])
 
         self._configure_styles()
-        self._ambient_surfaces: dict[str, tuple[object, str]] = {}
+
+    def apply_theme(self, state: ThemeState) -> None:
+        self.theme_state = state
+        palette = state.palette
+
+        self.colors = {
+            "background": palette.background,
+            "surface": palette.surface,
+            "surface_elevated": palette.surface_elevated,
+            "text": palette.text,
+            "text_muted": palette.text_muted,
+            "text_secondary": palette.text_muted,
+            "border": palette.border,
+            "accent": palette.accent,
+            "accent_blue": palette.accent,
+            "accent_purple": palette.agent_running,
+            "success": palette.success,
+            "warning": palette.warning,
+            "error": palette.error,
+            "agent_running": palette.agent_running,
+        }
+
+        self.accent_blue = palette.accent
+        self.accent_purple = palette.agent_running
+        self._configure_styles()
+
+        try:
+            self.root.configure(background=palette.background)
+        except tk.TclError:
+            pass
+
+        for widget, _original in tuple(self._ambient_surfaces.values()):
+            try:
+                widget.configure(
+                    style=self.style_name_for_surface(widget)
+                )
+            except tk.TclError:
+                continue
+
+    def style_name_for_surface(self, widget) -> str:
+        name = f"PacePilot.Theme{id(widget)}.{widget.winfo_class()}"
+        palette = self.theme_state.palette
+
+        if widget.winfo_class() == "TLabelframe":
+            self.style.configure(
+                name,
+                background=palette.surface,
+                foreground=palette.text,
+                bordercolor=palette.border,
+                lightcolor=palette.border,
+                darkcolor=palette.border,
+            )
+            self.style.configure(
+                f"{name}.Label",
+                background=palette.surface,
+                foreground=palette.text,
+            )
+        else:
+            self.style.configure(
+                name,
+                background=palette.background,
+                foreground=palette.text,
+            )
+
+        return name
 
     def _configure_styles(self) -> None:
         colors = self.tokens.colors
@@ -254,6 +321,52 @@ class VisualRenderer:
     def apply_root(self, widget: tk.Tk) -> None:
         widget.configure(background=self.tokens.colors["background"])
 
+    def register_ambient_surface(self, widget) -> None:
+        key = str(widget)
+        if key in self._ambient_surfaces:
+            return
+        try:
+            original = widget.cget("style") or widget.winfo_class()
+        except tk.TclError:
+            return
+        self._ambient_surfaces[key] = (widget, original)
+
+    def apply_ambient_field(self, intensity: float) -> None:
+        intensity = min(max(float(intensity), 0.0), 1.0)
+
+        for widget, original in tuple(self._ambient_surfaces.values()):
+            try:
+                base = (
+                    self.colors["surface"]
+                    if "TLabelframe" in str(original)
+                    else self.colors["background"]
+                )
+                color = _mix_color(
+                    base,
+                    self.accent_blue,
+                    intensity * 0.055,
+                )
+                style_name = (
+                    f"PacePilot.Ambient{id(widget)}.{widget.winfo_class()}"
+                )
+                self.style.configure(
+                    style_name,
+                    background=color,
+                    foreground=self.style.lookup(
+                        original,
+                        "foreground",
+                    ) or self.colors["text"],
+                )
+                if widget.winfo_class() == "TLabelframe":
+                    self.style.configure(
+                        f"{style_name}.Label",
+                        background=color,
+                        foreground=self.colors["text"],
+                    )
+                widget.configure(style=style_name)
+            except tk.TclError:
+                continue
+
     def apply_header_frame(self, widget: ttk.Frame) -> None:
         widget.configure(style="PacePilot.TFrame")
 
@@ -289,32 +402,6 @@ class VisualRenderer:
             relief=tk.FLAT,
             activestyle="none",
         )
-
-    def register_ambient_surface(self, widget) -> None:
-        key = str(widget)
-        if key in self._ambient_surfaces:
-            return
-        try:
-            original = widget.cget("background")
-        except tk.TclError:
-            original = ""
-        self._ambient_surfaces[key] = (widget, original)
-
-    def apply_ambient_field(self, intensity: float) -> None:
-        intensity = max(0.0, min(1.0, intensity))
-        for widget, original in tuple(self._ambient_surfaces.values()):
-            if not original:
-                continue
-            try:
-                widget.configure(
-                    background=self._mix_color(
-                        original,
-                        self.composition.tokens.colors["accent"],
-                        intensity * 0.08,
-                    )
-                )
-            except tk.TclError:
-                continue
 
     def apply_pointer_surface(self, widget, intensity: float) -> None:
         key = str(widget)

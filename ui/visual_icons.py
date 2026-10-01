@@ -18,6 +18,7 @@ class VisualIconSet:
         root: tk.Misc,
         tokens: VisualTokens = DEFAULT_VISUAL_TOKENS,
     ) -> None:
+        self._root = root
         self.foreground = tokens.colors["text_secondary"]
         self.accent = tokens.colors.get("accent_blue", tokens.colors["accent"])
         self._images = {
@@ -40,6 +41,13 @@ class VisualIconSet:
             )
         }
 
+    def apply_theme(self, palette) -> None:
+        self.foreground = palette.text_muted
+        self.accent = palette.accent
+        for name, image in self._images.items():
+            image.blank()
+            self._draw_icon(image, name)
+
     def image(self, name: str) -> tk.PhotoImage:
         return self._images[name]
 
@@ -48,6 +56,10 @@ class VisualIconSet:
 
     def _build(self, root: tk.Misc, name: str) -> tk.PhotoImage:
         image = tk.PhotoImage(master=root, width=self.SIZE, height=self.SIZE)
+        self._draw_icon(image, name)
+        return image
+
+    def _draw_icon(self, image: tk.PhotoImage, name: str) -> None:
         color = self.accent if name in {"brand", "folder"} else self.foreground
         line = self._line
 
@@ -131,8 +143,6 @@ class VisualIconSet:
             line(image, 8, 4, 8, 8, color)
             line(image, 8, 8, 11, 10, color)
             line(image, 2, 4, 2, 8, color)
-        return image
-
     @classmethod
     def _line(
         cls,

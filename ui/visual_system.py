@@ -267,6 +267,8 @@ class _StageOutline:
             "success": _mix_color(blue, purple, 0.55),
             "error": colors["error"],
         }
+        self._theme_surface = self.tokens.colors["surface"]
+        self._theme_border = self.tokens.colors["border"]
         self.canvas = tk.Canvas(
             parent,
             background=background,
@@ -283,6 +285,24 @@ class _StageOutline:
         self._after_id = None
         self._started = 0.0
         self._pointer_intensity = 0.0
+
+    def apply_theme(self, palette) -> None:
+        background = palette.surface_elevated
+        self.canvas.configure(background=background)
+        blue = palette.accent
+        purple = palette.agent_running
+        self._colors = {
+            "blue": blue,
+            "purple": purple,
+            "ready": blue,
+            "glow": _mix_color(background, purple, 0.42),
+            "waiting_dim": _mix_color(background, purple, 0.22),
+            "success": _mix_color(blue, purple, 0.55),
+            "error": palette.error,
+        }
+        self._theme_surface = palette.surface
+        self._theme_border = palette.border
+        self._draw()
 
     def set_pointer(self, intensity: float) -> None:
         self._pointer_intensity = min(max(intensity, 0.0), 0.22)
@@ -333,7 +353,7 @@ class _StageOutline:
             return
 
         bounds = (1.5, 1.5, width - 1.5, height - 1.5)
-        base = self.tokens.colors["border"]
+        base = self._theme_border
         self.canvas.create_rectangle(*bounds, outline=base, width=1)
 
         if self.effect is StageEffect.REST:
@@ -366,7 +386,7 @@ class _StageOutline:
             self.canvas.create_rectangle(
                 *bounds,
                 outline=_mix_color(
-                    self.tokens.colors["surface"],
+                    self._theme_surface,
                     self._colors["blue"],
                     0.55,
                 ),
@@ -406,7 +426,7 @@ class _StageOutline:
         progress = min((time.monotonic() - self._started) / duration, 1.0)
         softened = _mix_color(
             color,
-            self.tokens.colors["surface"],
+            self._theme_surface,
             progress,
         )
         width = self.canvas.winfo_width()
@@ -551,6 +571,38 @@ class AgentPanelVisualSystem:
             )
         self.previous: AgentVisualProjection | None = None
 
+    def apply_theme(self, palette) -> None:
+        self.colors = {
+            "background": palette.background,
+            "surface": palette.surface,
+            "surface_elevated": palette.surface_elevated,
+            "text": palette.text,
+            "text_muted": palette.text_muted,
+            "border": palette.border,
+            "accent": palette.accent,
+            "agent_running": palette.agent_running,
+            "success": palette.success,
+            "error": palette.error,
+        }
+        self.background = palette.surface_elevated
+        self.muted = palette.text_muted
+        self.focus = palette.accent
+        self.style.configure(
+            "PacePilot.M25Stage.TFrame",
+            background=self.background,
+        )
+        for outline in self.outlines.values():
+            outline.apply_theme(palette)
+        self.idle_outline.apply_theme(palette)
+        for stage, title_fade in self.title_fades.items():
+            style_name = f"PacePilot.M25Stage{id(title_fade.widget)}.TLabel"
+            self.style.configure(
+                style_name,
+                background=self.background,
+                foreground=self.muted,
+            )
+            title_fade.color = self.muted
+
     def render(self, state: AgentInteractionState) -> AgentVisualTransition:
         transition = self.model.transition(self.previous, state)
         target = transition.target
@@ -569,10 +621,7 @@ class AgentPanelVisualSystem:
             outline.set_effect(effect, transition.animation)
 
         title_color = (
-            self.colors.get(
-                "accent_purple",
-                self.colors.get("agent_running", self.focus),
-            )
+            self.colors.get("agent_running", self.focus)
             if target.effect in {StageEffect.WAITING, StageEffect.SUCCESS}
             else self.focus
         )

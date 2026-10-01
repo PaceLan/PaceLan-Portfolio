@@ -1,4 +1,5 @@
 from pathlib import Path
+import math
 import tkinter as tk
 from tkinter import filedialog, ttk
 from typing import Optional, Union
@@ -6,13 +7,14 @@ from typing import Optional, Union
 from application.workspace import ApplicationTreeNode
 from ui.controller import ApplicationController
 from ui.agent_panel import AgentInteractionPanel
-from ui.ambient_effects import AmbientFieldController
 from ui.agent_state import AgentInteractionState
 from ui.animation_accessibility import AnimationAccessibility
+from ui.ambient_effects import AmbientFieldController
 from ui.visual_system import AgentStage, AgentVisualSystem
 from ui.visual_composition import DEFAULT_UX_COMPOSITION, UXComposition
 from ui.visual_layout import WorkspaceLayout
 from ui.visual_renderer import VisualRenderer
+from ui.theme import ThemeState
 from ui.visual_icons import VisualIconSet
 from ui.pointer_visuals import PointerVisualLayer
 from ui.workspace_empty_state import WorkspaceEmptyState
@@ -28,27 +30,12 @@ class CodingAssistantApp:
     """Build the read-only Phase 7.1 application shell."""
 
     _IGNORED_PROJECT_DIRECTORIES = {
-        ".git",
-        ".venv",
-        ".tox",
-        "venv",
-        "__pycache__",
-        "__pypackages__",
-        "build",
-        "dist",
-        "_internal",
-        "runtime",
-        "python-runtime",
-        "site-packages",
-        "node_modules",
+        ".git", ".venv", ".tox", "venv", "__pycache__", "__pypackages__",
+        "build", "dist", "_internal", "runtime", "python-runtime",
+        "site-packages", "node_modules",
     }
     _IGNORED_PROJECT_SUFFIXES = {
-        ".dll",
-        ".exe",
-        ".pyd",
-        ".pyc",
-        ".so",
-        ".dylib",
+        ".dll", ".exe", ".pyd", ".pyc", ".so", ".dylib",
     }
 
     def __init__(
@@ -70,15 +57,29 @@ class CodingAssistantApp:
         self.icons = VisualIconSet(root, self.composition.tokens)
         self.layout = layout or self.composition.layout
         self.visual_renderer = VisualRenderer(root, self.composition)
+        self.theme_state = ThemeState()
+        self.ambient = AmbientFieldController()
 
         self.root.title("PacePilot")
         self.root.minsize(800, 500)
         self._tree_paths: dict[str, tuple[str, bool]] = {}
         self.workspace_state = self.controller.initial_state()
-        self._build_layout()
+        self._ambient_after = None
+        self._ambient_phase = 0.0
+
         self._build_ambient_layer()
-        self._start_ambient()
+        self._build_layout()
+
+        for surface in (
+            self.header_frame,
+            self.project_panel,
+            self.workspace_panel,
+            self.agent_panel,
+        ):
+            self.visual_renderer.register_ambient_surface(surface)
+
         self._build_pointer_layer()
+        self._start_ambient()
 
         if project_root is not None:
             self.controller.open_project(project_root)
@@ -88,75 +89,73 @@ class CodingAssistantApp:
             self.status_label.configure(text="Open a project to begin")
 
     def _build_ambient_layer(self) -> None:
-        self._ambient_canvas = tk.Canvas(
+        colors = self.composition.tokens.colors
+        self.ambient_canvas = tk.Canvas(
             self.root,
-            bg=self.composition.tokens.colors["background"],
             highlightthickness=0,
             bd=0,
+            bg=colors["background"],
         )
-        self._ambient_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self._ambient_canvas.lower()
+        self.ambient_canvas.place(
+            relx=0,
+            rely=0,
+            relwidth=1,
+            relheight=1,
+        )
 
-        for surface in (
-            self.header,
-            self.project_frame,
-            self.workspace_frame,
-            self.agent_frame,
-        ):
-            self.visual_renderer.register_ambient_surface(surface)
 
     def _start_ambient(self) -> None:
         self.ambient.start()
-        self.root.bind("<Configure>", self._on_ambient_resize)
+        self.root.bind("<Configure>", self._on_ambient_resize, add="+")
         self._animate_ambient()
 
-    def _on_ambient_resize(self, _event=None) -> None:
+    def _on_ambient_resize(self, _event: tk.Event) -> None:
         self._render_ambient()
 
     def _animate_ambient(self) -> None:
-        if self._ambient_after is not None:
-            self.root.after_cancel(self._ambient_after)
+        self._ambient_after = None
+        if not self.root.winfo_exists():
+            return
+
         self._ambient_phase = (self._ambient_phase + 0.0035) % 1.0
         self._render_ambient()
         self._ambient_after = self.root.after(55, self._animate_ambient)
 
     def _render_ambient(self) -> None:
-        if not hasattr(self, "_ambient_canvas"):
-            return
-
-        canvas = self._ambient_canvas
+        canvas = self.ambient_canvas
         width = max(canvas.winfo_width(), 1)
         height = max(canvas.winfo_height(), 1)
         canvas.delete("ambient")
 
-        state = self.ambient.snapshot()
+        state = self.ambient.snapshot(self._ambient_phase)
         total_intensity = 0.0
 
         for layer in state.layers:
-            pulse = 0.5 + 0.5 * math.sin(
-                self._ambient_phase * math.tau + layer.phase
+            pulse = self.ambient.layer_opacity(
+                layer,
+                state.phase,
+                state.intensity,
             )
-            intensity = max(0.0, min(1.0, layer.intensity * (0.72 + 0.28 * pulse)))
-            total_intensity += intensity
+            total_intensity += pulse
+            cx = width * layer.x
+            cy = height * layer.y
+            radius = min(width, height) * layer.radius
 
-            cx = width * layer.center_x
-            cy = height * layer.center_y
-            radius = max(width, height) * layer.radius
-
-            for index in range(9, 0, -1):
-                factor = index / 9.0
-                extent = radius * factor
-                alpha = intensity * (1.0 - factor) * 0.11
-                fill = self._blend_hex(
-                    self.composition.tokens.colors["background"],
+            steps = 9
+            for index in range(steps, 0, -1):
+                ratio = index / steps
+                r = radius * ratio
+                opacity = pulse * (1.0 - ratio) * 0.55
+                fill = _blend_hex(
+                    self.theme_state.palette.background,
                     layer.color,
-                    alpha,
+                    opacity,
                 )
                 canvas.create_oval(
-                    cx - extent,
-                    cy - extent,
-                    cx + extent,
-                    cy + extent,
+                    cx - r,
+                    cy - r,
+                    cx + r,
+                    cy + r,
                     fill=fill,
                     outline="",
                     tags="ambient",
@@ -165,26 +164,6 @@ class CodingAssistantApp:
         self.visual_renderer.apply_ambient_field(
             total_intensity / max(len(state.layers), 1)
         )
-
-    def destroy(self) -> None:
-        if self._ambient_after is not None:
-            self.root.after_cancel(self._ambient_after)
-            self._ambient_after = None
-        self.root.destroy()
-
-    @staticmethod
-    def _blend_hex(background: str, foreground: str, amount: float) -> str:
-        amount = max(0.0, min(1.0, amount))
-        bg = _hex_rgb(background)
-        fg = _hex_rgb(foreground)
-        rgb = tuple(round(a + (b - a) * amount) for a, b in zip(bg, fg))
-        return "#{:02X}{:02X}{:02X}".format(*rgb)
-
-
-def _hex_rgb(value: str) -> tuple[int, int, int]:
-    value = value.lstrip("#")
-    return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
-
 
     def _build_layout(self) -> None:
         self.root.columnconfigure(0, weight=1)
@@ -232,12 +211,17 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
             anchor="w",
         )
         self.project_context_label.grid(
-            row=0,
-            column=1,
-            sticky="ew",
-            padx=(20, 12),
+            row=0, column=1, sticky="ew", padx=(20, 12),
         )
         self.visual_renderer.apply_header_context(self.project_context_label)
+
+        self.theme_button = ttk.Button(
+            header,
+            text="? Night",
+            command=self._toggle_theme,
+        )
+        self.theme_button.grid(row=0, column=2, sticky="e", padx=(0, 8))
+        self.visual_renderer.apply_primary_action(self.theme_button)
 
         self.open_project_button = ttk.Button(
             header,
@@ -247,7 +231,21 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
             command=self._choose_project,
         )
         self.visual_renderer.apply_primary_action(self.open_project_button)
-        self.open_project_button.grid(row=0, column=2, sticky="e")
+        self.open_project_button.grid(row=0, column=3, sticky="e")
+
+    def _toggle_theme(self) -> None:
+        self.theme_state = self.theme_state.toggled()
+        self.visual_renderer.apply_theme(self.theme_state)
+        palette = self.theme_state.palette
+        self.icons.apply_theme(palette)
+        self.empty_state.apply_theme(palette)
+        self.agent_panel.visual_system.apply_theme(palette)
+
+        self.theme_button.configure(
+            text="? Day" if self.theme_state.is_night else "? Night"
+        )
+
+        self._render_ambient()
 
     def _build_pointer_layer(self) -> None:
         self.pointer_layer = PointerVisualLayer(
@@ -264,9 +262,8 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         ):
             self.pointer_layer.register(
                 surface,
-                lambda _x, _y, amount, target=surface: (
-                    renderer.apply_pointer_surface(target, amount)
-                ),
+                lambda _x, _y, amount, target=surface:
+                renderer.apply_pointer_surface(target, amount),
             )
         self.pointer_layer.register(
             self.empty_state,
@@ -274,10 +271,8 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         )
         self.pointer_layer.register(
             self.file_viewer,
-            lambda _x, _y, amount: renderer.apply_pointer_text(
-                self.file_viewer,
-                amount,
-            ),
+            lambda _x, _y, amount:
+            renderer.apply_pointer_text(self.file_viewer, amount),
         )
         self.pointer_layer.register(
             self.tree_view,
@@ -286,26 +281,18 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         for stage, frame in self.agent_panel._stage_frames.items():
             self.pointer_layer.register(
                 frame,
-                lambda _x, _y, amount, target_stage=stage: (
-                    self.agent_panel.visual_system.set_pointer(
-                        target_stage,
-                        amount,
-                    )
+                lambda _x, _y, amount, target_stage=stage:
+                self.agent_panel.visual_system.set_pointer(
+                    target_stage, amount,
                 ),
             )
 
-    def _set_project_tree_pointer(
-        self,
-        _x: int,
-        y: int,
-        intensity: float,
-    ) -> None:
+    def _set_project_tree_pointer(self, _x: int, y: int, intensity: float) -> None:
         row = self.tree_view.identify_row(y) if intensity > 0.01 else ""
         previous = getattr(self, "_pointer_tree_item", None)
         if previous and previous != row:
             tags = tuple(
-                tag
-                for tag in self.tree_view.item(previous, "tags")
+                tag for tag in self.tree_view.item(previous, "tags")
                 if tag != "pointer-hover"
             )
             self.tree_view.item(previous, tags=tags)
@@ -332,27 +319,21 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         self.tree_view = ttk.Treeview(navigation, show="tree")
         self.tree_view.tag_configure(
             "pointer-hover",
-            background=self.composition.tokens.colors["surface_elevated"],
-            foreground=self.composition.tokens.colors["text"],
+            background=self.theme_state.palette.surface_elevated,
+            foreground=self.theme_state.palette.text,
         )
         self.tree_view.grid(row=0, column=0, sticky="nsew")
         self.tree_view.bind("<<TreeviewSelect>>", self._on_tree_selection)
         self.visual_renderer.apply_tree(self.tree_view)
 
         tree_scrollbar = ttk.Scrollbar(
-            navigation,
-            orient=tk.VERTICAL,
-            command=self.tree_view.yview,
+            navigation, orient=tk.VERTICAL, command=self.tree_view.yview,
         )
         tree_scrollbar.grid(row=0, column=1, sticky="ns")
         self.tree_view.configure(yscrollcommand=tree_scrollbar.set)
-
         return navigation
 
-    def _build_main_workspace(
-        self,
-        parent: ttk.Panedwindow,
-    ) -> ttk.LabelFrame:
+    def _build_main_workspace(self, parent: ttk.Panedwindow) -> ttk.LabelFrame:
         main_content = ttk.LabelFrame(parent, text="", padding=16)
         self.workspace_heading = ttk.Label(
             main_content,
@@ -367,30 +348,19 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         self.visual_renderer.apply_workspace(main_content)
 
         self.file_path_label = ttk.Label(
-            main_content,
-            text="No file selected",
-            anchor="w",
+            main_content, text="No file selected", anchor="w",
         )
-        self.file_path_label.grid(
-            row=0,
-            column=0,
-            sticky="ew",
-            pady=(0, 8),
-        )
+        self.file_path_label.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         self.visual_renderer.apply_text_label(self.file_path_label)
 
         self.file_viewer = tk.Text(
-            main_content,
-            wrap=tk.NONE,
-            state=tk.DISABLED,
+            main_content, wrap=tk.NONE, state=tk.DISABLED,
         )
         self.file_viewer.grid(row=1, column=0, sticky="nsew")
         self.visual_renderer.apply_text_viewer(self.file_viewer)
 
         self.file_scrollbar = ttk.Scrollbar(
-            main_content,
-            orient=tk.VERTICAL,
-            command=self.file_viewer.yview,
+            main_content, orient=tk.VERTICAL, command=self.file_viewer.yview,
         )
         self.file_scrollbar.grid(row=1, column=1, sticky="ns")
         self.file_viewer.configure(yscrollcommand=self.file_scrollbar.set)
@@ -403,13 +373,9 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         self.empty_state.grid(row=1, column=0, sticky="nsew")
         self.file_viewer.grid_remove()
         self.file_scrollbar.grid_remove()
-
         return main_content
 
-    def _build_agent_panel(
-        self,
-        parent: ttk.Panedwindow,
-    ) -> AgentInteractionPanel:
+    def _build_agent_panel(self, parent: ttk.Panedwindow) -> AgentInteractionPanel:
         self.agent_panel = AgentInteractionPanel(
             parent,
             self.controller.agent_state,
@@ -422,10 +388,7 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         )
         return self.agent_panel
 
-    def _render_agent_state(
-        self,
-        state: AgentInteractionState,
-    ) -> AgentInteractionState:
+    def _render_agent_state(self, state: AgentInteractionState) -> AgentInteractionState:
         self.agent_panel.render(state)
         projection = AgentVisualSystem.project(state)
         self.empty_state.set_agent_active(projection.stage is not AgentStage.IDLE)
@@ -437,10 +400,7 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
 
     def _build_status(self) -> None:
         self.status_label = tk.Label(
-            self.root,
-            text="Ready",
-            relief=tk.SUNKEN,
-            anchor="w",
+            self.root, text="Ready", relief=tk.SUNKEN, anchor="w",
         )
         self.status_label.grid(row=2, column=0, sticky="ew")
         self.visual_renderer.apply_status(self.status_label)
@@ -475,22 +435,17 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
 
     def _choose_project(self) -> None:
         project_path = filedialog.askdirectory(
-            parent=self.root,
-            title="Open Project",
-            mustexist=True,
+            parent=self.root, title="Open Project", mustexist=True,
         )
         if not project_path:
             return
-
         try:
             self.controller.open_project(project_path)
             self._set_project_state()
             self._load_project_tree()
             self.status_label.configure(text="Project loaded")
         except (OSError, ValueError) as error:
-            self.status_label.configure(
-                text=f"Unable to open project: {error}"
-            )
+            self.status_label.configure(text=f"Unable to open project: {error}")
 
     @classmethod
     def _is_user_project_node(cls, node: ApplicationTreeNode) -> bool:
@@ -500,9 +455,7 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
 
     def _insert_tree_node(self, parent: str, node: ApplicationTreeNode) -> str:
         item_id = self.tree_view.insert(
-            parent,
-            "end",
-            text=node.name,
+            parent, "end", text=node.name,
             image=self.icons.image("folder" if node.is_directory else "file"),
             open=True,
         )
@@ -521,7 +474,6 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
         selection = self.tree_view.selection()
         if not selection:
             return
-
         relative_path, is_directory = self._tree_paths[selection[0]]
 
         if is_directory:
@@ -542,7 +494,6 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
             return
 
         result = self.controller.select_file(relative_path)
-
         if result.success:
             self.workspace_state = WorkspaceState(
                 project=self.workspace_state.project,
@@ -553,9 +504,7 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
                 ),
                 selected_file=SelectedFile(path=result.path),
                 viewer=ViewerState(
-                    path=result.path,
-                    contents=result.contents,
-                    loaded=True,
+                    path=result.path, contents=result.contents, loaded=True,
                 ),
                 status=f"Loaded: {result.path}",
             )
@@ -581,9 +530,7 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
                 ),
                 selected_file=SelectedFile(path=result.path),
                 viewer=ViewerState(
-                    path=result.path,
-                    contents="",
-                    loaded=False,
+                    path=result.path, contents="", loaded=False,
                     error=result.error,
                 ),
                 status="Unable to load file",
@@ -611,6 +558,29 @@ def _hex_rgb(value: str) -> tuple[int, int, int]:
             if widget is not None:
                 widget.grid_remove()
 
+    def destroy(self) -> None:
+        if self._ambient_after is not None:
+            self.root.after_cancel(self._ambient_after)
+            self._ambient_after = None
+        self.root.destroy()
+
+
+def _blend_hex(background: str, foreground: str, amount: float) -> str:
+    amount = max(0.0, min(1.0, amount))
+    bg = _hex_rgb(background)
+    fg = _hex_rgb(foreground)
+    return "#" + "".join(
+        f"{round(base + (target - base) * amount):02x}"
+        for base, target in zip(bg, fg)
+    )
+
+
+def _hex_rgb(value: str) -> tuple[int, int, int]:
+    value = value.lstrip("#")
+    if len(value) != 6:
+        raise ValueError("expected a six-digit hex color")
+    return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
+
 
 def create_app(
     root: tk.Tk,
@@ -618,8 +588,6 @@ def create_app(
     controller: Optional[ApplicationController] = None,
     agent_service=None,
 ) -> CodingAssistantApp:
-    """Create the UI shell without starting the Tk event loop."""
-
     return CodingAssistantApp(
         root,
         controller=controller,
@@ -629,9 +597,7 @@ def create_app(
 
 
 def main() -> None:
-    """Start the standalone UI shell."""
     from ui.app_entry import main as desktop_main
-
     desktop_main()
 
 

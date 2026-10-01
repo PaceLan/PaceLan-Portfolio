@@ -55,6 +55,29 @@ class WorkspaceEmptyState(tk.Canvas):
         self._draw()
         self._schedule_ambient()
 
+    def apply_theme(self, palette) -> None:
+        self.colors = {
+            "background": palette.background,
+            "surface": palette.surface,
+            "surface_elevated": palette.surface_elevated,
+            "text": palette.text,
+            "text_muted": palette.text_muted,
+            "border": palette.border,
+            "accent": palette.accent,
+        }
+        self.top_color = palette.background
+        self.middle_color = _mix_color(
+            palette.surface,
+            palette.agent_running,
+            0.10,
+        )
+        self.bottom_color = palette.surface
+        self.text_color = palette.text
+        self.muted_color = palette.text_muted
+        self.accent_color = palette.accent
+        self.configure(background=palette.background)
+        self._draw()
+
     def set_project_open(self, project_open: bool) -> None:
         if self._project_open == project_open:
             return
