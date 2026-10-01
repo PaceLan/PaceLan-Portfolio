@@ -35,6 +35,7 @@ class VisualRenderer:
             toplevel.configure(background=self.colors["background"])
 
         self._configure_styles()
+        self._ambient_surfaces: dict[str, tuple[object, str]] = {}
 
     def _configure_styles(self) -> None:
         colors = self.tokens.colors
@@ -288,6 +289,32 @@ class VisualRenderer:
             relief=tk.FLAT,
             activestyle="none",
         )
+
+    def register_ambient_surface(self, widget) -> None:
+        key = str(widget)
+        if key in self._ambient_surfaces:
+            return
+        try:
+            original = widget.cget("background")
+        except tk.TclError:
+            original = ""
+        self._ambient_surfaces[key] = (widget, original)
+
+    def apply_ambient_field(self, intensity: float) -> None:
+        intensity = max(0.0, min(1.0, intensity))
+        for widget, original in tuple(self._ambient_surfaces.values()):
+            if not original:
+                continue
+            try:
+                widget.configure(
+                    background=self._mix_color(
+                        original,
+                        self.composition.tokens.colors["accent"],
+                        intensity * 0.08,
+                    )
+                )
+            except tk.TclError:
+                continue
 
     def apply_pointer_surface(self, widget, intensity: float) -> None:
         key = str(widget)

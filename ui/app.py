@@ -6,6 +6,7 @@ from typing import Optional, Union
 from application.workspace import ApplicationTreeNode
 from ui.controller import ApplicationController
 from ui.agent_panel import AgentInteractionPanel
+from ui.ambient_effects import AmbientFieldController
 from ui.agent_state import AgentInteractionState
 from ui.animation_accessibility import AnimationAccessibility
 from ui.visual_system import AgentStage, AgentVisualSystem
@@ -75,6 +76,8 @@ class CodingAssistantApp:
         self._tree_paths: dict[str, tuple[str, bool]] = {}
         self.workspace_state = self.controller.initial_state()
         self._build_layout()
+        self._build_ambient_layer()
+        self._start_ambient()
         self._build_pointer_layer()
 
         if project_root is not None:
@@ -83,6 +86,105 @@ class CodingAssistantApp:
             self._load_project_tree()
         else:
             self.status_label.configure(text="Open a project to begin")
+
+    def _build_ambient_layer(self) -> None:
+        self._ambient_canvas = tk.Canvas(
+            self.root,
+            bg=self.composition.tokens.colors["background"],
+            highlightthickness=0,
+            bd=0,
+        )
+        self._ambient_canvas.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._ambient_canvas.lower()
+
+        for surface in (
+            self.header,
+            self.project_frame,
+            self.workspace_frame,
+            self.agent_frame,
+        ):
+            self.visual_renderer.register_ambient_surface(surface)
+
+    def _start_ambient(self) -> None:
+        self.ambient.start()
+        self.root.bind("<Configure>", self._on_ambient_resize)
+        self._animate_ambient()
+
+    def _on_ambient_resize(self, _event=None) -> None:
+        self._render_ambient()
+
+    def _animate_ambient(self) -> None:
+        if self._ambient_after is not None:
+            self.root.after_cancel(self._ambient_after)
+        self._ambient_phase = (self._ambient_phase + 0.0035) % 1.0
+        self._render_ambient()
+        self._ambient_after = self.root.after(55, self._animate_ambient)
+
+    def _render_ambient(self) -> None:
+        if not hasattr(self, "_ambient_canvas"):
+            return
+
+        canvas = self._ambient_canvas
+        width = max(canvas.winfo_width(), 1)
+        height = max(canvas.winfo_height(), 1)
+        canvas.delete("ambient")
+
+        state = self.ambient.snapshot()
+        total_intensity = 0.0
+
+        for layer in state.layers:
+            pulse = 0.5 + 0.5 * math.sin(
+                self._ambient_phase * math.tau + layer.phase
+            )
+            intensity = max(0.0, min(1.0, layer.intensity * (0.72 + 0.28 * pulse)))
+            total_intensity += intensity
+
+            cx = width * layer.center_x
+            cy = height * layer.center_y
+            radius = max(width, height) * layer.radius
+
+            for index in range(9, 0, -1):
+                factor = index / 9.0
+                extent = radius * factor
+                alpha = intensity * (1.0 - factor) * 0.11
+                fill = self._blend_hex(
+                    self.composition.tokens.colors["background"],
+                    layer.color,
+                    alpha,
+                )
+                canvas.create_oval(
+                    cx - extent,
+                    cy - extent,
+                    cx + extent,
+                    cy + extent,
+                    fill=fill,
+                    outline="",
+                    tags="ambient",
+                )
+
+        self.visual_renderer.apply_ambient_field(
+            total_intensity / max(len(state.layers), 1)
+        )
+
+    def destroy(self) -> None:
+        if self._ambient_after is not None:
+            self.root.after_cancel(self._ambient_after)
+            self._ambient_after = None
+        self.root.destroy()
+
+    @staticmethod
+    def _blend_hex(background: str, foreground: str, amount: float) -> str:
+        amount = max(0.0, min(1.0, amount))
+        bg = _hex_rgb(background)
+        fg = _hex_rgb(foreground)
+        rgb = tuple(round(a + (b - a) * amount) for a, b in zip(bg, fg))
+        return "#{:02X}{:02X}{:02X}".format(*rgb)
+
+
+def _hex_rgb(value: str) -> tuple[int, int, int]:
+    value = value.lstrip("#")
+    return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
+
 
     def _build_layout(self) -> None:
         self.root.columnconfigure(0, weight=1)
