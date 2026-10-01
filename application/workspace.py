@@ -119,3 +119,57 @@ class ProjectWorkspaceService:
 
         return self._file_reader.read_file(relative_path)
 
+    def close_project(self) -> None:
+        """Close the current project and clear workspace-local state."""
+        self._project_path = None
+        self._file_reader = None
+        self._tree_provider = None
+        self.project_manager = type(self.project_manager)()
+
+    def persist_project(self):
+        """Persist the current project state as a recoverable snapshot."""
+        project_path = self._project_path
+
+        if project_path is None:
+            raise ValueError(
+                "A valid project must be open before persisting"
+            )
+
+        info = self.project_manager.get_project_info()
+        if not bool(info.get("exists", False)) or not bool(
+            info.get("is_directory", False)
+        ):
+            raise ValueError(
+                "A valid project must be open before persisting"
+            )
+
+        from history.history_core import HistoryEntry, HistoryStore
+        from snapshots.snapshot_service import SnapshotService
+        from datetime import datetime, timezone
+
+        snapshot = SnapshotService(project_path).create_snapshot()
+
+        history_directory = project_path / "history"
+        history_directory.mkdir(parents=True, exist_ok=True)
+        HistoryStore(history_directory).append(
+            HistoryEntry(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                operation="persist_project",
+                target=str(project_path),
+                result=snapshot.snapshot_id,
+                success=True,
+            )
+        )
+        return snapshot
+
+    def reopen_project(self):
+        """Reopen the previously active project."""
+        if self._project_path is None:
+            raise ValueError(
+                "No previously opened project is available to reopen"
+            )
+
+        project_path = self._project_path
+        self.close_project()
+        return self.open_project(project_path)
+

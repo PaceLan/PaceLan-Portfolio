@@ -1,6 +1,7 @@
 """Application-layer services for product-facing orchestration."""
 
 from collections.abc import Iterable
+from concurrent.futures import Future, ThreadPoolExecutor
 
 from agent_workflow.agent_project_planner import AgentProjectPlanner
 from agent_workflow.agent_service import AgentService
@@ -13,12 +14,16 @@ from agent_workflow.core_interfaces import (
     Task,
 )
 from agent_workflow.execution_snapshot import ExecutionSnapshot
+from agent_workflow.execution_readiness import ExecutionReadiness
 from agent_workflow.project_context_interface import (
     ProjectContextAgentInterface,
 )
+from agent_workflow.risk_approval import RiskApprovalAwareness
 from agent_workflow.workflow_core import WorkflowTask
 from agent_workflow.workflow_plan import WorkflowPlan, WorkflowStep
 from agent_workflow.workflow_result import WorkflowResult
+
+from .runtime_control import ApplicationRuntimeControlService
 
 from .models import (
     ApplicationExecutionModel,
@@ -186,6 +191,9 @@ class PlanningService:
         if not isinstance(plan, WorkflowPlan):
             raise TypeError("plan must be a WorkflowPlan")
 
+        assessments = RiskApprovalAwareness.assess_plan(plan.steps)
+        readiness = ExecutionReadiness().check(plan)
+
         return PlanModel(
             task_id=plan.task.task_id,
             project_id=plan.task.project_id,
@@ -205,9 +213,17 @@ class PlanningService:
                     ),
                     target=step.target,
                     context=step.context,
+                    readiness=assessment.readiness.value,
+                    reason=assessment.reason,
+                    ready=assessment.is_ready,
                 )
-                for step in plan.steps
+                for step, assessment in zip(plan.steps, assessments)
             ),
+            ready=readiness.ready and all(
+                assessment.is_ready for assessment in assessments
+            ),
+            issues=readiness.issues,
+            warnings=readiness.warnings,
         )
 
 
@@ -342,6 +358,49 @@ class ApplicationExecutionService:
             )
 
         self._agent_service = agent_service
+        self._executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="pacepilot-agent",
+        )
+        self._active_future: Future | None = None
+        self.runtime_control = ApplicationRuntimeControlService(
+            agent_service,
+        )
+
+    def start(
+        self,
+        task: TaskModel,
+        steps: Iterable[WorkflowStep] = (),
+    ) -> Future:
+        """Start Agent execution without blocking the UI caller."""
+        if not isinstance(task, TaskModel):
+            raise TypeError("task must be a TaskModel")
+
+        if (
+            self._active_future is not None
+            and not self._active_future.done()
+        ):
+            raise RuntimeError("agent execution is already active")
+
+        self._active_future = self._executor.submit(
+            self.run,
+            task,
+            steps,
+        )
+        return self._active_future
+
+    def pause(self):
+        return self.runtime_control.pause()
+
+    def resume(self):
+        return self.runtime_control.resume()
+
+    def terminate(self):
+        return self.runtime_control.terminate()
+
+    def runtime_status(self):
+        return self.runtime_control.status()
+
 
     def run(
         self,

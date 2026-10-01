@@ -1,15 +1,17 @@
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk
+from tkinter import filedialog, ttk
 from typing import Optional, Union
 
 from application.workspace import ApplicationTreeNode
 from ui.controller import ApplicationController
 from ui.agent_panel import AgentInteractionPanel
 from ui.agent_state import AgentInteractionState
+from ui.visual_system import AgentVisualSystem, StageEffect
 from ui.visual_composition import DEFAULT_UX_COMPOSITION, UXComposition
 from ui.visual_layout import WorkspaceLayout
 from ui.visual_renderer import VisualRenderer
+from ui.workspace_empty_state import WorkspaceEmptyState
 from ui.workspace_state import (
     SelectedFile,
     TreeState,
@@ -20,6 +22,30 @@ from ui.workspace_state import (
 
 class CodingAssistantApp:
     """Build the read-only Phase 7.1 application shell."""
+
+    _IGNORED_PROJECT_DIRECTORIES = {
+        ".git",
+        ".venv",
+        ".tox",
+        "venv",
+        "__pycache__",
+        "__pypackages__",
+        "build",
+        "dist",
+        "_internal",
+        "runtime",
+        "python-runtime",
+        "site-packages",
+        "node_modules",
+    }
+    _IGNORED_PROJECT_SUFFIXES = {
+        ".dll",
+        ".exe",
+        ".pyd",
+        ".pyc",
+        ".so",
+        ".dylib",
+    }
 
     def __init__(
         self,
@@ -49,7 +75,7 @@ class CodingAssistantApp:
             self._set_project_state()
             self._load_project_tree()
         else:
-            self.status_label.configure(text=self.workspace_state.status)
+            self.status_label.configure(text="Open a project to begin")
 
     def _build_layout(self) -> None:
         self.root.columnconfigure(0, weight=1)
@@ -81,6 +107,13 @@ class CodingAssistantApp:
         )
         title.grid(row=0, column=0, sticky="w")
         self.visual_renderer.apply_header(title)
+
+        self.open_project_button = ttk.Button(
+            header,
+            text="Open Project",
+            command=self._choose_project,
+        )
+        self.open_project_button.grid(row=0, column=1, sticky="e")
 
     def _build_navigation(self, parent: ttk.Panedwindow) -> ttk.LabelFrame:
         navigation = ttk.LabelFrame(parent, text="Project", padding=8)
@@ -133,13 +166,18 @@ class CodingAssistantApp:
         self.file_viewer.grid(row=1, column=0, sticky="nsew")
         self.visual_renderer.apply_text_viewer(self.file_viewer)
 
-        file_scrollbar = ttk.Scrollbar(
+        self.file_scrollbar = ttk.Scrollbar(
             main_content,
             orient=tk.VERTICAL,
             command=self.file_viewer.yview,
         )
-        file_scrollbar.grid(row=1, column=1, sticky="ns")
-        self.file_viewer.configure(yscrollcommand=file_scrollbar.set)
+        self.file_scrollbar.grid(row=1, column=1, sticky="ns")
+        self.file_viewer.configure(yscrollcommand=self.file_scrollbar.set)
+
+        self.empty_state = WorkspaceEmptyState(main_content)
+        self.empty_state.grid(row=1, column=0, sticky="nsew")
+        self.file_viewer.grid_remove()
+        self.file_scrollbar.grid_remove()
 
         return main_content
 
@@ -162,6 +200,16 @@ class CodingAssistantApp:
         state: AgentInteractionState,
     ) -> AgentInteractionState:
         self.agent_panel.render(state)
+        projection = AgentVisualSystem.project(state)
+        self.empty_state.set_agent_active(
+            projection.effect
+            in {
+                StageEffect.RUNNING,
+                StageEffect.WAITING,
+                StageEffect.SUCCESS,
+                StageEffect.ERROR,
+            }
+        )
         return state
 
     def _on_agent_history_selected(self, run_id: str) -> None:
@@ -188,6 +236,8 @@ class CodingAssistantApp:
         )
 
     def _load_project_tree(self) -> None:
+        self.tree_view.delete(*self.tree_view.get_children())
+        self._tree_paths.clear()
         tree = self.controller.get_project_tree()
         self._insert_tree_node("", tree)
         self.workspace_state = WorkspaceState(
@@ -197,7 +247,34 @@ class CodingAssistantApp:
             viewer=ViewerState(),
             status="Project loaded",
         )
+        self.empty_state.set_project_open(True)
+        self.file_path_label.configure(text="No file selected")
         self.status_label.configure(text=self.workspace_state.status)
+
+    def _choose_project(self) -> None:
+        project_path = filedialog.askdirectory(
+            parent=self.root,
+            title="Open Project",
+            mustexist=True,
+        )
+        if not project_path:
+            return
+
+        try:
+            self.controller.open_project(project_path)
+            self._set_project_state()
+            self._load_project_tree()
+            self.status_label.configure(text="Project loaded")
+        except (OSError, ValueError) as error:
+            self.status_label.configure(
+                text=f"Unable to open project: {error}"
+            )
+
+    @classmethod
+    def _is_user_project_node(cls, node: ApplicationTreeNode) -> bool:
+        if node.is_directory:
+            return node.name.casefold() not in cls._IGNORED_PROJECT_DIRECTORIES
+        return node.path.suffix.casefold() not in cls._IGNORED_PROJECT_SUFFIXES
 
     def _insert_tree_node(self, parent: str, node: ApplicationTreeNode) -> str:
         item_id = self.tree_view.insert(parent, "end", text=node.name, open=True)
@@ -207,6 +284,8 @@ class CodingAssistantApp:
             relative_path = node.path.relative_to(project_path).as_posix() or "."
         self._tree_paths[item_id] = (relative_path, node.is_directory)
         for child in node.children:
+            if not self._is_user_project_node(child):
+                continue
             self._insert_tree_node(item_id, child)
         return item_id
 
@@ -252,6 +331,15 @@ class CodingAssistantApp:
                 ),
                 status=f"Loaded: {result.path}",
             )
+            empty_state = getattr(self, "empty_state", None)
+            if empty_state is not None:
+                empty_state.grid_remove()
+            file_viewer = getattr(self, "file_viewer", None)
+            if file_viewer is not None:
+                file_viewer.grid()
+            file_scrollbar = getattr(self, "file_scrollbar", None)
+            if file_scrollbar is not None:
+                file_scrollbar.grid()
             self.file_path_label.configure(text=result.path)
             self._set_file_contents(result.contents)
             self.status_label.configure(text=self.workspace_state.status)
@@ -284,6 +372,16 @@ class CodingAssistantApp:
     def _clear_file_viewer(self, label: str) -> None:
         self.file_path_label.configure(text=label)
         self._set_file_contents("")
+        empty_state = getattr(self, "empty_state", None)
+        if empty_state is not None:
+            empty_state.set_project_open(
+                self.controller.project_context.path is not None
+            )
+            empty_state.grid()
+        for widget_name in ("file_viewer", "file_scrollbar"):
+            widget = getattr(self, widget_name, None)
+            if widget is not None:
+                widget.grid_remove()
 
 
 def create_app(
@@ -304,9 +402,9 @@ def create_app(
 
 def main() -> None:
     """Start the standalone UI shell."""
-    root = tk.Tk()
-    create_app(root, Path(__file__).resolve().parent.parent)
-    root.mainloop()
+    from ui.app_entry import main as desktop_main
+
+    desktop_main()
 
 
 if __name__ == "__main__":

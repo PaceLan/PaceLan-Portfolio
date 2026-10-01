@@ -91,6 +91,23 @@ class ApplicationController:
     def get_project_tree(self) -> ApplicationTreeNode:
         return self.workspace.build_tree_model()
 
+    def close_project(self) -> None:
+        self.workspace.close_project()
+        self._project_context = ProjectContext(None, None, False, False)
+
+    def persist_project(self):
+        return self.workspace.persist_project()
+
+    def reopen_project(self) -> ProjectContext:
+        info = self.workspace.reopen_project()
+        self._project_context = ProjectContext(
+            name=info["project_name"],
+            path=info["project_path"],
+            exists=bool(info["exists"]),
+            is_directory=bool(info["is_directory"]),
+        )
+        return self._project_context
+
     def select_file(
         self,
         relative_path: Union[str, Path],
@@ -154,6 +171,57 @@ class ApplicationController:
         )
 
         return self.agent_state
+
+    def start_agent_task(
+        self,
+        task,
+        steps=(),
+    ):
+        if self.application_execution_service is None:
+            raise RuntimeError(
+                "ApplicationExecutionService is not configured"
+            )
+
+        application_task = TaskModel(
+            task_id=task.task_id,
+            project_id=task.project_id,
+            description=task.description,
+            context=task.context,
+        )
+
+        return self.application_execution_service.start(
+            application_task,
+            steps,
+        )
+
+    def pause_agent(self):
+        if self.application_execution_service is None:
+            raise RuntimeError(
+                "ApplicationExecutionService is not configured"
+            )
+        return self.application_execution_service.pause()
+
+    def resume_agent(self):
+        if self.application_execution_service is None:
+            raise RuntimeError(
+                "ApplicationExecutionService is not configured"
+            )
+        return self.application_execution_service.resume()
+
+    def terminate_agent(self):
+        if self.application_execution_service is None:
+            raise RuntimeError(
+                "ApplicationExecutionService is not configured"
+            )
+        return self.application_execution_service.terminate()
+
+    def agent_runtime_status(self):
+        if self.application_execution_service is None:
+            raise RuntimeError(
+                "ApplicationExecutionService is not configured"
+            )
+        return self.application_execution_service.runtime_status()
+
 
     def select_agent_history(
         self,

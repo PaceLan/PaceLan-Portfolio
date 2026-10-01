@@ -32,6 +32,9 @@ class StepModel:
     approval: str = "NOT_REQUESTED"
     target: str = "."
     context: str | None = None
+    readiness: str = "UNKNOWN"
+    reason: str = ""
+    ready: bool = False
 
 
 @dataclass(frozen=True)
@@ -41,6 +44,9 @@ class PlanModel:
     task_id: str
     project_id: str
     steps: Tuple[StepModel, ...] = ()
+    ready: bool = False
+    issues: Tuple[str, ...] = ()
+    warnings: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -59,7 +59,7 @@ class PythonASTAnalyzer:
                 f"Python source path is not a file: {source_path}"
             )
 
-        source = source_path.read_text(encoding="utf-8")
+        source = source_path.read_text(encoding="utf-8-sig")
         tree = ast.parse(source, filename=str(source_path))
 
         imports: list[PythonImport] = []

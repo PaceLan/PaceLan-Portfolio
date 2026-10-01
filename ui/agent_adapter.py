@@ -2,11 +2,7 @@
 
 from typing import Mapping
 
-from agent_workflow.context_understanding import ContextUnderstandingResult
-from agent_workflow.risk_approval import RiskApprovalAwareness
-from agent_workflow.execution_readiness import ExecutionReadiness
-from agent_workflow.workflow_plan import WorkflowStep
-from application.models import ApplicationExecutionModel
+from application.models import ApplicationExecutionModel, PlanModel
 from ui.agent_state import (
     AgentExecutionState,
     AgentHistoryEntry,
@@ -379,7 +375,7 @@ class AgentUIAdapter:
 
     @staticmethod
     def _understanding_state(
-        result: ContextUnderstandingResult | None,
+        result,
     ) -> AgentUnderstandingState:
         if result is None:
             return AgentUnderstandingState()
@@ -411,37 +407,26 @@ class AgentUIAdapter:
 
     @staticmethod
     def _risk_approval_state(plan) -> AgentRiskApprovalState:
-        if plan is None:
+        if not isinstance(plan, PlanModel):
             return AgentRiskApprovalState()
-
-        steps = tuple(getattr(plan, "steps", ()))
-
-        if not all(isinstance(step, WorkflowStep) for step in steps):
-            return AgentRiskApprovalState()
-
-        assessments = RiskApprovalAwareness.assess_plan(steps)
-        readiness = ExecutionReadiness().check(plan)
 
         presentation_steps = tuple(
             AgentRiskApprovalStepState(
-                step_id=assessment.step_id,
-                risk=assessment.risk.value,
-                approval=assessment.approval.value,
-                readiness=assessment.readiness.value,
-                reason=assessment.reason,
-                ready=assessment.is_ready,
+                step_id=step.step_id,
+                risk=step.risk,
+                approval=step.approval,
+                readiness=step.readiness,
+                reason=step.reason,
+                ready=step.ready,
             )
-            for assessment in assessments
+            for step in plan.steps
         )
 
         return AgentRiskApprovalState(
-            ready=readiness.ready and all(
-                assessment.is_ready
-                for assessment in assessments
-            ),
+            ready=plan.ready,
             steps=presentation_steps,
-            issues=readiness.issues,
-            warnings=readiness.warnings,
+            issues=plan.issues,
+            warnings=plan.warnings,
         )
 
 

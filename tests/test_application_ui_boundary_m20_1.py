@@ -88,6 +88,12 @@ class M201ApplicationUiBoundaryTests(unittest.TestCase):
             self.assertNotIn("import core", source)
             self.assertNotIn("ProjectTreeNode", source)
 
+    def test_ui_modules_do_not_import_agent_workflow_internals(self):
+        for path in Path("ui").glob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            self.assertNotIn("from agent_workflow", source, str(path))
+            self.assertNotIn("import agent_workflow", source, str(path))
+
     def test_application_workspace_is_importable(self):
         from application.workspace import ProjectWorkspaceService
 

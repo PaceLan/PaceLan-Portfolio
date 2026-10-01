@@ -103,3 +103,15 @@ class AgentService:
             project_context_agent=self.project_context_agent,
             context_understanding=context_understanding,
         )
+
+    def pause_runtime(self) -> None:
+        self.workflow_service.pause_runtime()
+
+    def resume_runtime(self) -> None:
+        self.workflow_service.resume_runtime()
+
+    def terminate_runtime(self) -> None:
+        self.workflow_service.terminate_runtime()
+
+    def runtime_state(self) -> str:
+        return self.workflow_service.runtime_state()

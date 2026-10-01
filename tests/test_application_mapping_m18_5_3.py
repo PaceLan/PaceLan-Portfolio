@@ -349,6 +349,9 @@ class TestApplicationMappingM1853(unittest.TestCase):
                     "approval",
                     "target",
                     "context",
+                    "readiness",
+                    "reason",
+                    "ready",
                 },
             )
 
