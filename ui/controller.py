@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from application.models import TaskModel
+from application.multi_project_workspace import MultiProjectWorkspaceService
 from application.services import ApplicationExecutionService
 from application.workspace import (
     ApplicationTreeNode,
@@ -53,11 +54,15 @@ class ApplicationController:
         workspace: Optional[ProjectWorkspaceService] = None,
         agent_service=None,
     ) -> None:
-        self.workspace = workspace or ProjectWorkspaceService(
+        base_workspace = workspace or ProjectWorkspaceService(
             project_manager=project_manager,
             tree_provider=tree_provider,
             file_reader=file_reader,
         )
+        self.multi_project_workspace = MultiProjectWorkspaceService(
+            workspace=base_workspace,
+        )
+        self.workspace = self.multi_project_workspace.workspace
         self._project_context = ProjectContext(None, None, False, False)
         self.agent_service = agent_service
         self.application_execution_service = (
@@ -76,8 +81,42 @@ class ApplicationController:
     def agent_history(self):
         return self.agent_state.history
 
+    @property
+    def active_project(self):
+        return self.multi_project_workspace.active_project
+
+    def list_projects(self):
+        return self.multi_project_workspace.registry.list_projects()
+
+    def switch_project(self, project_id: str) -> ProjectContext:
+        info = self.multi_project_workspace.switch_project(project_id)
+        self._project_context = ProjectContext(
+            name=info["project_name"],
+            path=info["project_path"],
+            exists=bool(info["exists"]),
+            is_directory=bool(info["is_directory"]),
+        )
+        return self._project_context
+
     def open_project(self, path: Union[str, Path]) -> ProjectContext:
-        info = self.workspace.open_project(path)
+        project_path = Path(path).resolve()
+        project_id = project_path.name or str(project_path)
+
+        existing = {
+            project.project_id: project
+            for project in self.multi_project_workspace.registry.list_projects()
+        }
+
+        if project_id in existing and existing[project_id].path != project_path:
+            project_id = str(project_path)
+
+        if project_id not in existing:
+            self.multi_project_workspace.register_project(
+                project_id,
+                project_path,
+            )
+
+        info = self.multi_project_workspace.open_project(project_id)
 
         self._project_context = ProjectContext(
             name=info["project_name"],
