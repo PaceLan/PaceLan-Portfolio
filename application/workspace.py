@@ -7,6 +7,10 @@ from core.project_manager import ProjectManager
 from core.project_tree import ProjectTree, ProjectTreeNode
 from application.models import ProjectGoal, ProjectModel
 from application.project_metadata import ProjectMetadataService
+from application.task_management import (
+    ProductTask,
+    TaskManagementService,
+)
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,7 @@ class ProjectWorkspaceService:
         self._file_reader = file_reader
         self._project_path: Optional[Path] = None
         self._project_model: Optional[ProjectModel] = None
+        self._task_service = TaskManagementService()
 
     @property
     def project_path(self) -> Optional[Path]:
@@ -51,6 +56,71 @@ class ProjectWorkspaceService:
     @property
     def project_model(self) -> Optional[ProjectModel]:
         return self._project_model
+
+    @property
+    def tasks(self) -> tuple[ProductTask, ...]:
+        if self._project_model is None:
+            return ()
+        return self._task_service.list_for_project(
+            self._project_model.project_id
+        )
+
+    def create_task(
+        self,
+        title: str,
+        description: str = "",
+        *,
+        task_id: str | None = None,
+    ) -> ProductTask:
+        if self._project_model is None:
+            raise ValueError(
+                "A valid project must be open before creating a task"
+            )
+
+        return self._task_service.create(
+            self._project_model.project_id,
+            title,
+            description,
+            task_id=task_id,
+        )
+
+    def get_task(self, task_id: str) -> ProductTask:
+        return self._task_service.get(task_id)
+
+    def attach_task_plan(self, task_id: str, plan_id: str) -> ProductTask:
+        if self._project_model is None:
+            raise ValueError("No project is open")
+
+        try:
+            task = self._task_service.get(task_id)
+        except KeyError as exc:
+            raise ValueError("Task does not belong to the active project") from exc
+
+        if task.project_id != self._project_model.project_id:
+            raise ValueError("Task does not belong to the active project")
+
+        if not isinstance(plan_id, str) or not plan_id.strip():
+            raise ValueError("plan_id must be a non-empty string")
+
+        return self._task_service.attach_plan(task_id, plan_id)
+
+    def submit_task(self, task_id: str) -> ProductTask:
+        return self._task_service.submit(task_id)
+
+    def start_task(self, task_id: str) -> ProductTask:
+        return self._task_service.start(task_id)
+
+    def complete_task(self, task_id: str) -> ProductTask:
+        return self._task_service.complete(task_id)
+
+    def fail_task(self, task_id: str) -> ProductTask:
+        return self._task_service.fail(task_id)
+
+    def block_task(self, task_id: str) -> ProductTask:
+        return self._task_service.block(task_id)
+
+    def cancel_task(self, task_id: str) -> ProductTask:
+        return self._task_service.cancel(task_id)
 
     @property
     def project_goal(self) -> Optional[ProjectGoal]:
@@ -157,6 +227,7 @@ class ProjectWorkspaceService:
         self._project_model = None
         self._file_reader = None
         self._tree_provider = None
+        self._task_service = TaskManagementService()
         self.project_manager = type(self.project_manager)()
 
     def persist_project(self):

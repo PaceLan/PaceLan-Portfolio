@@ -34,4 +34,9 @@ __all__ = [
     "SnapshotModel",
     "StepModel",
     "TaskModel",
+    "ProductTask",
+    "TaskManagementService",
+    "TaskStatus",
 ]
+
+from .task_management import ProductTask, TaskManagementService, TaskStatus
