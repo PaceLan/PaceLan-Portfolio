@@ -5,8 +5,8 @@ from __future__ import annotations
 import tkinter as tk
 from dataclasses import dataclass
 
-from ui.ambient_effects import AmbientFieldController
 from ui.theme import ThemeState
+
 
 
 @dataclass(frozen=True)
@@ -24,12 +24,12 @@ class OpeningExperience:
         self,
         root: tk.Tk,
         *,
-        ambient: AmbientFieldController | None = None,
-        theme_state: ThemeState | None = None,
+        ambient=None,
+        theme_state=None,
         config: OpeningConfig | None = None,
     ):
         self.root = root
-        self.ambient = ambient or AmbientFieldController()
+        self.ambient = ambient
         self.theme_state = theme_state or ThemeState()
         self.config = config or OpeningConfig()
 
@@ -46,6 +46,16 @@ class OpeningExperience:
         )
         self._canvas.pack(fill="both", expand=True)
         self._canvas.bind("<Configure>", self._render)
+
+    def set_greeting(self, greeting: str | None) -> None:
+        self.config = OpeningConfig(
+            mark=self.config.mark,
+            greeting=greeting or "",
+            duration_ms=self.config.duration_ms,
+            fade_in_ms=self.config.fade_in_ms,
+            fade_out_ms=self.config.fade_out_ms,
+            frame_ms=self.config.frame_ms,
+        )
 
     def start(self, on_complete=None) -> None:
         if self._started or self.completed:
@@ -85,7 +95,7 @@ class OpeningExperience:
     def _render(self, progress=1.0, elapsed=0) -> None:
         self._canvas.delete("all")
 
-        palette = self.theme_state.palette
+        palette = self.theme_state.palette if self.theme_state is not None else None
         self._canvas.configure(bg=palette.background)
 
         width = max(self._canvas.winfo_width(), 1)
@@ -208,4 +218,3 @@ class OpeningExperience:
 
 
 __all__ = ["OpeningConfig", "OpeningExperience"]
-

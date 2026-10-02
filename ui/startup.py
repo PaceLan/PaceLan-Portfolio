@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from typing import Optional
 
 import tkinter as tk
@@ -19,15 +19,17 @@ class StartupCoordinator:
         runtime_root,
         agent_service=None,
         greeting_resolver=None,
+        opening_config=None,
     ):
         self.root = root
         self.runtime_root = Path(runtime_root)
         self.agent_service = agent_service
         self.greeting_resolver = greeting_resolver
+        self.opening_config = opening_config
 
         self.runtime: Optional[ApplicationRuntime] = None
         self.app: Optional[CodingAssistantApp] = None
-        self.opening: Optional[OpeningExperience] = None
+        self.opening = None
 
         self.ready = False
         self.initializing = False
@@ -55,13 +57,19 @@ class StartupCoordinator:
         self.app = CodingAssistantApp(
             self.root,
             agent_service=self.runtime.agent_service,
+            runtime_root=self.runtime_root,
         )
+
+
+        self.app.visual_experience.start_ambient()
+
+        visual_experience = self.app.visual_experience
 
         self.opening = OpeningExperience(
             self.root,
-            ambient=self.app.ambient,
-            theme_state=self.app.theme_state,
-            config=OpeningConfig(),
+            ambient=visual_experience.ambient,
+            theme_state=visual_experience.theme_state,
+            config=self.opening_config,
         )
 
         self.opening.start()
@@ -70,16 +78,21 @@ class StartupCoordinator:
             lambda: self._initialize_greeting(on_ready)
         )
 
+
+
     def _initialize_greeting(self, on_ready=None):
+        if self.app is None:
+            return
+
         if self.greeting_resolver is not None:
             greeting = self.greeting_resolver(self.runtime_root)
         else:
-            greeting_service = DailyGreetingService(
-                history_path=greeting_history_path(
-                    base_directory=self.runtime_root
-                )
-            )
-            greeting = greeting_service.today_text()
+            greeting = self.app.visual_experience.resolve_greeting()
+
+        self.app.visual_experience.greeting = greeting
+        self.opening.set_greeting(
+            greeting
+        )
 
         self.initialization_steps = (
             "runtime",
@@ -92,9 +105,6 @@ class StartupCoordinator:
             "greeting",
         )
 
-        if self.opening is not None:
-            self.opening.config = OpeningConfig(greeting=greeting)
-
         self.root.after_idle(
             lambda: self._finish(on_ready)
         )
@@ -103,7 +113,7 @@ class StartupCoordinator:
         self.initializing = False
         self.ready = True
 
-        if self.opening is not None and not self.opening.completed:
+        if self.opening is not None:
             self.opening.complete()
 
         if on_ready is not None and self.app is not None:

@@ -6,10 +6,20 @@ from typing import Optional, Union
 
 from application.bootstrap import ApplicationBootstrap, ApplicationRuntime
 from ui.app import CodingAssistantApp, create_app as _create_app
-from ui.daily_greeting import DailyGreetingService, greeting_history_path
-from ui.opening_experience import OpeningConfig, OpeningExperience
 from ui.startup import StartupCoordinator
+from ui.daily_greeting import DailyGreetingService, greeting_history_path
+from ui.opening_experience import OpeningConfig
 
+
+
+def resolve_daily_greeting(runtime_root):
+    greeting_service = DailyGreetingService(
+        greeting_history_path(runtime_root)
+    )
+    daily_greeting = greeting_service.today_text()
+    # M26.5 opening contract: config=OpeningConfig(greeting=daily_greeting)
+    config = OpeningConfig(greeting=daily_greeting)
+    return config.greeting
 
 def create_runtime(
     project_root: Union[str, Path],
@@ -49,17 +59,6 @@ def create_app(
         agent_service=resolved_agent_service,
     )
 
-
-def resolve_daily_greeting(runtime_root):
-    greeting_service = DailyGreetingService(
-        history_path=greeting_history_path(
-            base_directory=runtime_root
-        )
-    )
-    daily_greeting = greeting_service.today_text()
-    # M26.5 opening contract: config=OpeningConfig(greeting=daily_greeting)
-    config = OpeningConfig(greeting=daily_greeting)
-    return config.greeting
 
 def main() -> None:
     root = None

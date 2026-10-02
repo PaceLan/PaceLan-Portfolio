@@ -9,13 +9,12 @@ from ui.controller import ApplicationController
 from ui.agent_panel import AgentInteractionPanel
 from ui.agent_state import AgentInteractionState
 from ui.animation_accessibility import AnimationAccessibility
-from ui.ambient_effects import AmbientFieldController
-from ui.unified_transition import UnifiedTransitionController, UnifiedTransitionKind
+from ui.unified_transition import UnifiedTransitionKind
 from ui.visual_system import AgentStage, AgentVisualSystem
 from ui.visual_composition import DEFAULT_UX_COMPOSITION, UXComposition
 from ui.visual_layout import WorkspaceLayout
 from ui.visual_renderer import VisualRenderer
-from ui.theme import ThemeState
+from ui.visual_experience import VisualExperienceController
 from ui.visual_icons import VisualIconSet
 from ui.pointer_visuals import PointerVisualLayer
 from ui.workspace_empty_state import WorkspaceEmptyState
@@ -47,6 +46,7 @@ class CodingAssistantApp:
         layout: Optional[WorkspaceLayout] = None,
         composition: Optional[UXComposition] = None,
         agent_service=None,
+        runtime_root: Optional[Union[str, Path]] = None,
         accessibility: Optional[AnimationAccessibility] = None,
     ) -> None:
         self.root = root
@@ -58,19 +58,22 @@ class CodingAssistantApp:
         self.icons = VisualIconSet(root, self.composition.tokens)
         self.layout = layout or self.composition.layout
         self.visual_renderer = VisualRenderer(root, self.composition)
-        self.theme_state = ThemeState()
-        self.ambient = AmbientFieldController()
-        self.transition_controller = UnifiedTransitionController()
-
+        self.visual_experience = VisualExperienceController(
+            root,
+            runtime_root=Path(runtime_root) if runtime_root is not None else None,
+            visual_renderer=self.visual_renderer,
+            composition=self.composition,
+        )
         self.root.title("PacePilot")
         self.root.minsize(800, 500)
         self._tree_paths: dict[str, tuple[str, bool]] = {}
         self.workspace_state = self.controller.initial_state()
-        self._ambient_after = None
-        self._ambient_phase = 0.0
-
-        self._build_ambient_layer()
         self._build_layout()
+
+        self.visual_experience.register_theme_surface(self.icons)
+        self.visual_experience.register_theme_surface(self.empty_state)
+        self.visual_experience.register_theme_surface(self.agent_panel.visual_system)
+
 
         for surface in (
             self.header_frame,
@@ -81,7 +84,6 @@ class CodingAssistantApp:
             self.visual_renderer.register_ambient_surface(surface)
 
         self._build_pointer_layer()
-        self._start_ambient()
 
         if project_root is not None:
             self.controller.open_project(project_root)
@@ -89,83 +91,6 @@ class CodingAssistantApp:
             self._load_project_tree()
         else:
             self.status_label.configure(text="Open a project to begin")
-
-    def _build_ambient_layer(self) -> None:
-        colors = self.composition.tokens.colors
-        self.ambient_canvas = tk.Canvas(
-            self.root,
-            highlightthickness=0,
-            bd=0,
-            bg=colors["background"],
-        )
-        self.ambient_canvas.place(
-            relx=0,
-            rely=0,
-            relwidth=1,
-            relheight=1,
-        )
-
-
-    def _start_ambient(self) -> None:
-        self.ambient.start()
-        self.root.bind("<Configure>", self._on_ambient_resize, add="+")
-        self._animate_ambient()
-
-    def _on_ambient_resize(self, _event: tk.Event) -> None:
-        self._render_ambient()
-
-    def _animate_ambient(self) -> None:
-        self._ambient_after = None
-        if not self.root.winfo_exists():
-            return
-
-        self._ambient_phase = (self._ambient_phase + 0.0035) % 1.0
-        self._render_ambient()
-        self._ambient_after = self.root.after(55, self._animate_ambient)
-
-    def _render_ambient(self) -> None:
-        canvas = self.ambient_canvas
-        width = max(canvas.winfo_width(), 1)
-        height = max(canvas.winfo_height(), 1)
-        canvas.delete("ambient")
-
-        state = self.ambient.snapshot(self._ambient_phase)
-        total_intensity = 0.0
-
-        for layer in state.layers:
-            pulse = self.ambient.layer_opacity(
-                layer,
-                state.phase,
-                state.intensity,
-            )
-            total_intensity += pulse
-            cx = width * layer.x
-            cy = height * layer.y
-            radius = min(width, height) * layer.radius
-
-            steps = 9
-            for index in range(steps, 0, -1):
-                ratio = index / steps
-                r = radius * ratio
-                opacity = pulse * (1.0 - ratio) * 0.55
-                fill = _blend_hex(
-                    self.theme_state.palette.background,
-                    layer.color,
-                    opacity,
-                )
-                canvas.create_oval(
-                    cx - r,
-                    cy - r,
-                    cx + r,
-                    cy + r,
-                    fill=fill,
-                    outline="",
-                    tags="ambient",
-                )
-
-        self.visual_renderer.apply_ambient_field(
-            total_intensity / max(len(state.layers), 1)
-        )
 
     def _build_layout(self) -> None:
         self.root.columnconfigure(0, weight=1)
@@ -235,26 +160,12 @@ class CodingAssistantApp:
         self.visual_renderer.apply_primary_action(self.open_project_button)
         self.open_project_button.grid(row=0, column=3, sticky="e")
 
+    @property
+    def theme_state(self):
+        return self.visual_experience.theme_state
+
     def _toggle_theme(self) -> None:
-        self.transition_controller.start(
-            UnifiedTransitionKind.THEME,
-            "theme",
-        )
-        self.transition_controller.enter()
-
-        self.theme_state = self.theme_state.toggled()
-        self.visual_renderer.apply_theme(self.theme_state)
-        palette = self.theme_state.palette
-        self.icons.apply_theme(palette)
-        self.empty_state.apply_theme(palette)
-        self.agent_panel.visual_system.apply_theme(palette)
-
-        self.theme_button.configure(
-            text="? Day" if self.theme_state.is_night else "? Night"
-        )
-
-        self._render_ambient()
-        self.transition_controller.complete()
+        self.visual_experience.toggle_theme()
 
     def _build_pointer_layer(self) -> None:
         self.pointer_layer = PointerVisualLayer(
@@ -398,16 +309,15 @@ class CodingAssistantApp:
         return self.agent_panel
 
     def _render_agent_state(self, state: AgentInteractionState) -> AgentInteractionState:
-        self.transition_controller.start(
+        self.visual_experience.start_transition(
             UnifiedTransitionKind.GREETING,
             "agent",
         )
-        self.transition_controller.enter()
 
         self.agent_panel.render(state)
         projection = AgentVisualSystem.project(state)
         self.empty_state.set_agent_active(projection.stage is not AgentStage.IDLE)
-        self.transition_controller.complete()
+        self.visual_experience.complete_transition()
         return state
 
     def _on_agent_history_selected(self, run_id: str) -> None:
@@ -456,17 +366,16 @@ class CodingAssistantApp:
         if not project_path:
             return
         try:
-            self.transition_controller.start(
+            self.visual_experience.start_transition(
                 UnifiedTransitionKind.WORKSPACE,
                 "workspace",
             )
-            self.transition_controller.enter()
 
             self.controller.open_project(project_path)
             self._set_project_state()
             self._load_project_tree()
             self.status_label.configure(text="Project loaded")
-            self.transition_controller.complete()
+            self.visual_experience.complete_transition()
         except (OSError, ValueError) as error:
             self.status_label.configure(text=f"Unable to open project: {error}")
 
@@ -582,9 +491,6 @@ class CodingAssistantApp:
                 widget.grid_remove()
 
     def destroy(self) -> None:
-        if self._ambient_after is not None:
-            self.root.after_cancel(self._ambient_after)
-            self._ambient_after = None
         self.root.destroy()
 
 

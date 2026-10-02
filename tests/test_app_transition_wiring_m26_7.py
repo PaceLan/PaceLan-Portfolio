@@ -1,4 +1,4 @@
-﻿import tkinter as tk
+import tkinter as tk
 import unittest
 from unittest.mock import Mock, patch
 
@@ -25,30 +25,34 @@ class M267AppTransitionWiringTests(unittest.TestCase):
         except tk.TclError:
             pass
 
-    def test_app_owns_unified_transition_controller(self):
+    def test_visual_experience_owns_unified_transition_controller(self):
         app = CodingAssistantApp(self.root)
 
-        self.assertIsNotNone(app.transition_controller)
+        self.assertIsNotNone(
+            app.visual_experience.transition_controller
+        )
         self.assertEqual(
-            app.transition_controller.current_kind,
+            app.visual_experience.transition_controller.current_kind,
             None,
         )
 
     def test_theme_toggle_uses_unified_transition(self):
         app = CodingAssistantApp(self.root)
 
+        transition = app.visual_experience.transition_controller
+
         with patch.object(
-            app.transition_controller,
+            transition,
             "start",
-            wraps=app.transition_controller.start,
+            wraps=transition.start,
         ) as start, patch.object(
-            app.transition_controller,
+            transition,
             "enter",
-            wraps=app.transition_controller.enter,
+            wraps=transition.enter,
         ) as enter, patch.object(
-            app.transition_controller,
+            transition,
             "complete",
-            wraps=app.transition_controller.complete,
+            wraps=transition.complete,
         ) as complete:
             app._toggle_theme()
 
@@ -58,8 +62,9 @@ class M267AppTransitionWiringTests(unittest.TestCase):
         )
         enter.assert_called_once()
         complete.assert_called_once()
+
         self.assertEqual(
-            app.transition_controller.current_kind,
+            transition.current_kind,
             UnifiedTransitionKind.THEME,
         )
 
@@ -71,21 +76,23 @@ class M267AppTransitionWiringTests(unittest.TestCase):
         app._load_project_tree = Mock()
         app.status_label = Mock()
 
+        transition = app.visual_experience.transition_controller
+
         with patch(
             "ui.app.filedialog.askdirectory",
             return_value="C:\\TestProject",
         ), patch.object(
-            app.transition_controller,
+            transition,
             "start",
-            wraps=app.transition_controller.start,
+            wraps=transition.start,
         ) as start, patch.object(
-            app.transition_controller,
+            transition,
             "enter",
-            wraps=app.transition_controller.enter,
+            wraps=transition.enter,
         ) as enter, patch.object(
-            app.transition_controller,
+            transition,
             "complete",
-            wraps=app.transition_controller.complete,
+            wraps=transition.complete,
         ) as complete:
             app._choose_project()
 
@@ -95,6 +102,7 @@ class M267AppTransitionWiringTests(unittest.TestCase):
         )
         enter.assert_called_once()
         complete.assert_called_once()
+
         app.controller.open_project.assert_called_once_with(
             "C:\\TestProject"
         )
@@ -111,25 +119,28 @@ class M267AppTransitionWiringTests(unittest.TestCase):
         projection = Mock()
         projection.stage = Mock()
 
+        transition = app.visual_experience.transition_controller
+
         with patch(
             "ui.app.AgentVisualSystem.project",
             return_value=projection,
         ), patch.object(
-            app.transition_controller,
+            transition,
             "start",
-            wraps=app.transition_controller.start,
+            wraps=transition.start,
         ) as start, patch.object(
-            app.transition_controller,
+            transition,
             "enter",
-            wraps=app.transition_controller.enter,
+            wraps=transition.enter,
         ) as enter, patch.object(
-            app.transition_controller,
+            transition,
             "complete",
-            wraps=app.transition_controller.complete,
+            wraps=transition.complete,
         ) as complete:
             result = app._render_agent_state(state)
 
         self.assertIs(result, state)
+
         start.assert_called_once_with(
             UnifiedTransitionKind.GREETING,
             "agent",
