@@ -5,7 +5,10 @@ from .commands import (
     ExecuteTaskCommandHandler,
     ExecuteTaskHandler,
 )
+from .services import ProjectService
+
 from .models import (
+    ProjectGoal,
     ApplicationExecutionModel,
     ExecutionModel,
     PlanModel,
@@ -19,8 +22,10 @@ from .models import (
 
 __all__ = [
     "ExecutionModel",
+    "ProjectGoal",
     "PlanModel",
     "ProjectModel",
+    "ProjectService",
     "ResultModel",
     "RunModel",
     "SnapshotModel",

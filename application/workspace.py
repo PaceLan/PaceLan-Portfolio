@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from core.file_reader import FileReader
 from core.project_manager import ProjectManager
 from core.project_tree import ProjectTree, ProjectTreeNode
+from application.models import ProjectGoal, ProjectModel
+from application.project_metadata import ProjectMetadataService
 
 
 @dataclass(frozen=True)
@@ -40,15 +42,45 @@ class ProjectWorkspaceService:
         self._tree_provider = tree_provider
         self._file_reader = file_reader
         self._project_path: Optional[Path] = None
+        self._project_model: Optional[ProjectModel] = None
 
     @property
     def project_path(self) -> Optional[Path]:
         return self._project_path
 
+    @property
+    def project_model(self) -> Optional[ProjectModel]:
+        return self._project_model
+
+    @property
+    def project_goal(self) -> Optional[ProjectGoal]:
+        if self._project_model is None:
+            return None
+        return self._project_model.goal
+
+    def update_project_goal(self, goal: str) -> ProjectGoal:
+        if self._project_model is None:
+            raise ValueError(
+                "A valid project must be open before updating its goal"
+            )
+
+        normalized_goal = ProjectGoal(text=goal.strip())
+        self._project_model = ProjectModel(
+            project_id=self._project_model.project_id,
+            goal=normalized_goal,
+        )
+        return normalized_goal
+
     def open_project(self, path: Union[str, Path]) -> dict[str, object]:
         self.project_manager.open_project(path)
         info = self.project_manager.get_project_info()
         self._project_path = info["project_path"]
+
+        if self._project_path is not None:
+            self._project_model = ProjectMetadataService.load(
+                self._project_path,
+                self._project_path.name,
+            )
 
         if self._file_reader is None and self._project_path is not None:
             self._file_reader = FileReader(self._project_path)
@@ -122,6 +154,7 @@ class ProjectWorkspaceService:
     def close_project(self) -> None:
         """Close the current project and clear workspace-local state."""
         self._project_path = None
+        self._project_model = None
         self._file_reader = None
         self._tree_provider = None
         self.project_manager = type(self.project_manager)()
@@ -148,6 +181,12 @@ class ProjectWorkspaceService:
         from datetime import datetime, timezone
 
         snapshot = SnapshotService(project_path).create_snapshot()
+
+        if self._project_model is not None:
+            ProjectMetadataService.save(
+                self._project_model,
+                project_path,
+            )
 
         history_directory = project_path / "history"
         history_directory.mkdir(parents=True, exist_ok=True)

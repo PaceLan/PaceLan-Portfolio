@@ -6,10 +6,18 @@ from typing import Mapping, Tuple
 
 
 @dataclass(frozen=True)
+class ProjectGoal:
+    """Immutable application representation of a project's goal."""
+
+    text: str = ""
+
+
+@dataclass(frozen=True)
 class ProjectModel:
     """Stable application representation of a project."""
 
     project_id: str
+    goal: ProjectGoal = ProjectGoal()
 
 
 @dataclass(frozen=True)

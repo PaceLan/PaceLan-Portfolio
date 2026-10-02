@@ -33,6 +33,7 @@ from .models import (
     ApplicationExecutionModel,
     ExecutionModel,
     PlanModel,
+    ProjectGoal,
     ProjectModel,
     ResultModel,
     RunModel,
@@ -55,11 +56,46 @@ class ProjectService:
         )
 
     @staticmethod
-    def create(project_id: str) -> ProjectModel:
+    def create(
+        project_id: str,
+        *,
+        goal: str = "",
+    ) -> ProjectModel:
         if not isinstance(project_id, str) or not project_id:
             raise ValueError("project_id must be a non-empty string")
 
-        return ProjectModel(project_id=project_id)
+        return ProjectModel(
+            project_id=project_id,
+            goal=ProjectGoal(text=ProjectService._validate_goal(goal)),
+        )
+
+    @staticmethod
+    def get_goal(project: ProjectModel) -> ProjectGoal:
+        if not isinstance(project, ProjectModel):
+            raise TypeError("project must be a ProjectModel")
+
+        return project.goal
+
+    @staticmethod
+    def update_goal(
+        project: ProjectModel,
+        goal: str,
+    ) -> ProjectModel:
+        if not isinstance(project, ProjectModel):
+            raise TypeError("project must be a ProjectModel")
+
+        return ProjectModel(
+            project_id=project.project_id,
+            goal=ProjectGoal(
+                text=ProjectService._validate_goal(goal),
+            ),
+        )
+
+    @staticmethod
+    def _validate_goal(goal: str) -> str:
+        if not isinstance(goal, str):
+            raise TypeError("goal must be a string")
+        return goal.strip()
 
 
 class TaskService:

@@ -130,6 +130,12 @@ class ApplicationController:
     def get_project_tree(self) -> ApplicationTreeNode:
         return self.workspace.build_tree_model()
 
+    def get_project_goal(self):
+        return self.workspace.project_goal
+
+    def update_project_goal(self, goal: str):
+        return self.workspace.update_project_goal(goal)
+
     def close_project(self) -> None:
         self.workspace.close_project()
         self._project_context = ProjectContext(None, None, False, False)
