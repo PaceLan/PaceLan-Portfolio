@@ -11,8 +11,10 @@ from application import (
 )
 from application.models import ApplicationExecutionModel
 from application.services import ApplicationExecutionService
+from application.verification import VerificationStatus
 from agent_workflow.agent_service import AgentService
 from agent_workflow.workflow_core import AgentWorkflow
+from permissions.reporting import ApprovalStatus, RiskLevel
 from agent_workflow.project_context import ProjectContextBuilder
 from agent_workflow.project_context_interface import ProjectContextAgentInterface
 from agent_workflow.project_scanner import ProjectScanner
@@ -216,6 +218,79 @@ class ApplicationExecutionFacadeM1865Tests(unittest.TestCase):
         self.assertEqual(
             execution.result.run_id,
             execution.snapshot.run_id,
+        )
+
+    def test_verification_is_verified_after_successful_execution(self):
+        task = TaskModel(
+            task_id="task-a5-3-success",
+            project_id="project-a5-3",
+        )
+        step = WorkflowStep(
+            operation="verify",
+            action=lambda: "ok",
+            step_id="success-step",
+        )
+
+        execution = self.service.run(task, steps=(step,))
+
+        self.assertEqual(
+            execution.verification.status,
+            VerificationStatus.VERIFIED,
+        )
+        self.assertTrue(execution.verification.verified)
+        self.assertEqual(
+            execution.verification.run_id,
+            execution.result.run_id,
+        )
+
+    def test_verification_is_not_verified_after_failed_execution(self):
+        task = TaskModel(
+            task_id="task-a5-3-failed",
+            project_id="project-a5-3",
+        )
+        step = WorkflowStep(
+            operation="fail",
+            action=lambda: (_ for _ in ()).throw(
+                RuntimeError("expected failure")
+            ),
+            step_id="failed-step",
+        )
+
+        execution = self.service.run(task, steps=(step,))
+
+        self.assertEqual(
+            execution.verification.status,
+            VerificationStatus.NOT_VERIFIED,
+        )
+        self.assertFalse(execution.verification.verified)
+        self.assertEqual(
+            execution.verification.run_id,
+            execution.result.run_id,
+        )
+
+    def test_verification_is_blocked_after_blocked_execution(self):
+        task = TaskModel(
+            task_id="task-a5-3-blocked",
+            project_id="project-a5-3",
+        )
+        step = WorkflowStep(
+            operation="blocked",
+            action=lambda: "should not execute",
+            risk=RiskLevel.SAFE,
+            approval=ApprovalStatus.BLOCKED,
+            step_id="blocked-step",
+        )
+
+        execution = self.service.run(task, steps=(step,))
+
+        self.assertEqual(
+            execution.verification.status,
+            VerificationStatus.BLOCKED,
+        )
+        self.assertFalse(execution.verification.verified)
+        self.assertEqual(
+            execution.verification.run_id,
+            execution.result.run_id,
         )
 
     def test_application_execution_model_is_immutable(self):
