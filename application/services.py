@@ -33,6 +33,7 @@ from .models import (
     ApplicationExecutionModel,
     ExecutionModel,
     PlanModel,
+    ProgressModel,
     ProjectGoal,
     ProjectModel,
     ResultModel,
@@ -265,6 +266,45 @@ class PlanningService:
             issues=readiness.issues,
             warnings=readiness.warnings,
         )
+
+
+class ProgressService:
+    """Application boundary for plan progress observations."""
+
+    @staticmethod
+    def from_snapshot(snapshot: SnapshotModel) -> ProgressModel:
+        if not isinstance(snapshot, SnapshotModel):
+            raise TypeError("snapshot must be a SnapshotModel")
+
+        completed_steps = sum(
+            1
+            for state in snapshot.step_states.values()
+            if str(state).lower() in {"success", "succeeded", "completed"}
+        )
+
+        return ProgressModel(
+            task_id=snapshot.task_id,
+            completed_steps=completed_steps,
+            total_steps=len(snapshot.step_states),
+            current_step_id=snapshot.current_step,
+        )
+
+    @staticmethod
+    def from_plan(plan: PlanModel) -> ProgressModel:
+        if not isinstance(plan, PlanModel):
+            raise TypeError("plan must be a PlanModel")
+
+        return ProgressModel(
+            task_id=plan.task_id,
+            completed_steps=0,
+            total_steps=len(plan.steps),
+            current_step_id=(
+                plan.steps[0].step_id
+                if plan.steps
+                else None
+            ),
+        )
+
 
 
 class RunService:

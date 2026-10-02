@@ -88,6 +88,26 @@ class ResultModel:
 
 
 @dataclass(frozen=True)
+class ProgressModel:
+    """Stable application representation of plan/execution progress."""
+
+    task_id: str
+    completed_steps: int = 0
+    total_steps: int = 0
+    current_step_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.completed_steps < 0:
+            raise ValueError("completed_steps must be non-negative")
+        if self.total_steps < 0:
+            raise ValueError("total_steps must be non-negative")
+        if self.completed_steps > self.total_steps:
+            raise ValueError(
+                "completed_steps must not exceed total_steps"
+            )
+
+
+@dataclass(frozen=True)
 class SnapshotModel:
     """Stable application representation of an execution snapshot."""
 
