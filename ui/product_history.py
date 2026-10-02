@@ -10,38 +10,76 @@ from typing import Iterable
 class ProductGrowthEvent:
     event_id: str
     date: str
-    kind: str
+    version: str
+    module: str
+    category: str
     title: str
-    description: str
-    version: str = ""
+    added: str = ""
+    changed: str = ""
+    fixed: str = ""
+    notes: str = ""
 
     def __post_init__(self) -> None:
-        if not self.event_id.strip():
-            raise ValueError("event_id must not be empty")
-        if not self.date.strip():
-            raise ValueError("date must not be empty")
-        if not self.kind.strip():
-            raise ValueError("kind must not be empty")
-        if not self.title.strip():
-            raise ValueError("title must not be empty")
-        if not self.description.strip():
-            raise ValueError("description must not be empty")
+        for field_name in (
+            "event_id",
+            "date",
+            "version",
+            "module",
+            "category",
+            "title",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must not be empty")
+
+    @property
+    def description(self) -> str:
+        parts = [
+            value.strip()
+            for value in (self.added, self.changed, self.fixed, self.notes)
+            if value.strip()
+        ]
+        return " ".join(parts)
 
     def to_dict(self) -> dict[str, str]:
         return asdict(self)
 
     @classmethod
-    def from_dict(
-        cls,
-        payload: dict[str, object],
-    ) -> "ProductGrowthEvent":
+    def from_dict(cls, payload: dict[str, object]) -> "ProductGrowthEvent":
+        if not isinstance(payload, dict):
+            raise ValueError("product growth event must be an object")
+
+        required_fields = (
+            "event_id",
+            "date",
+            "version",
+            "module",
+            "category",
+            "title",
+        )
+
+        missing = [
+            field_name
+            for field_name in required_fields
+            if field_name not in payload
+        ]
+        if missing:
+            raise ValueError(
+                "missing product growth event fields: "
+                + ", ".join(missing)
+            )
+
         return cls(
-            event_id=str(payload["event_id"]),
-            date=str(payload["date"]),
-            kind=str(payload["kind"]),
-            title=str(payload["title"]),
-            description=str(payload["description"]),
-            version=str(payload.get("version", "")),
+            event_id=payload["event_id"],
+            date=payload["date"],
+            version=payload["version"],
+            module=payload["module"],
+            category=payload["category"],
+            title=payload["title"],
+            added=payload.get("added", ""),
+            changed=payload.get("changed", ""),
+            fixed=payload.get("fixed", ""),
+            notes=payload.get("notes", ""),
         )
 
 
@@ -77,9 +115,7 @@ class ProductHistory:
 
     def latest(self) -> ProductGrowthEvent | None:
         timeline = self.timeline()
-        if not timeline:
-            return None
-        return timeline[-1]
+        return timeline[-1] if timeline else None
 
     def events_for_version(
         self,
@@ -90,12 +126,35 @@ class ProductHistory:
             if event.version == version
         )
 
+    def events_for_module(
+        self,
+        module: str,
+    ) -> tuple[ProductGrowthEvent, ...]:
+        return tuple(
+            event for event in self._events
+            if event.module == module
+        )
+
     def timeline(self) -> tuple[ProductGrowthEvent, ...]:
         return tuple(
             sorted(
                 self._events,
                 key=lambda event: (event.date, event.event_id),
             )
+        )
+
+    def summary(self) -> str:
+        timeline = self.timeline()
+        if not timeline:
+            return "PacePilot has no recorded product growth yet."
+
+        latest = timeline[-1]
+        versions = tuple(dict.fromkeys(event.version for event in timeline))
+        return (
+            f"PacePilot has recorded {len(timeline)} product milestones "
+            f"across {len(versions)} versions. "
+            f"The latest recorded milestone is {latest.title} ({latest.version}), "
+            f"dated {latest.date}."
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -109,6 +168,9 @@ class ProductHistory:
         cls,
         payload: dict[str, object],
     ) -> "ProductHistory":
+        if not isinstance(payload, dict):
+            raise ValueError("product history payload must be an object")
+
         events = payload.get("events", [])
         if not isinstance(events, list):
             raise ValueError("events must be a list")
@@ -117,15 +179,14 @@ class ProductHistory:
             tuple(
                 ProductGrowthEvent.from_dict(item)
                 for item in events
-                if isinstance(item, dict)
             )
         )
 
 
 class ProductHistoryStore:
-    """Persist PacePilot product-growth history independently from run history."""
+    """Persist product-growth history independently from operation history."""
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
     DEFAULT_FILENAME = "product_history.json"
 
     def __init__(self, path: str | Path) -> None:
@@ -145,8 +206,7 @@ class ProductHistoryStore:
         if not isinstance(payload, dict):
             raise ValueError("product history payload must be an object")
 
-        version = payload.get("version")
-        if version != self.SCHEMA_VERSION:
+        if payload.get("version") != self.SCHEMA_VERSION:
             raise ValueError("unsupported product history version")
 
         return ProductHistory.from_dict(payload)
@@ -169,119 +229,142 @@ def product_history_path(
     return Path(base_directory) / ProductHistoryStore.DEFAULT_FILENAME
 
 
-
 PRODUCT_GROWTH_EVENTS: tuple[ProductGrowthEvent, ...] = (
     ProductGrowthEvent(
-        event_id="m16-final-integration",
-        date="2026-09-28",
-        kind="milestone",
-        title="M16 final integration",
-        description="Completed the final M16 integration through the execution readiness and decision chain.",
-        version="M16",
+        "m16-final-integration",
+        "2026-09-28",
+        "M16",
+        "M16",
+        "execution",
+        "M16 final integration",
+        added="Completed the final execution readiness and decision chain integration.",
+        notes="Locked through M16.10.3.",
     ),
     ProductGrowthEvent(
-        event_id="m17-agent-context-planner",
-        date="2026-09-28",
-        kind="milestone",
-        title="M17 agent context and planner boundaries",
-        description="Locked the agent context integration and execution boundaries, planner context boundary, and planner ordering integrity.",
-        version="M17",
+        "m17-agent-context-planner",
+        "2026-09-28",
+        "M17",
+        "M17",
+        "agent architecture",
+        "M17 agent context and planner boundaries",
+        added="Integrated agent context and planner boundaries.",
+        changed="Established execution and planner ordering integrity.",
+        notes="Locked through M17.4.",
     ),
     ProductGrowthEvent(
-        event_id="m18-application-architecture",
-        date="2026-09-29",
-        kind="milestone",
-        title="M18 application architecture",
-        description="Locked the Application layer separating product UI concerns from Core architecture.",
-        version="M18",
+        "m18-application-architecture",
+        "2026-09-29",
+        "M18",
+        "M18",
+        "architecture",
+        "M18 application architecture",
+        added="Introduced the Application layer between product UI and Core.",
+        notes="Application architecture locked.",
     ),
     ProductGrowthEvent(
-        event_id="m19-visual-foundation",
-        date="2026-09-29",
-        kind="milestone",
-        title="M19 visual foundation",
-        description="Locked the visual tokens and reusable visual components forming the product visual foundation.",
-        version="M19",
+        "m19-visual-foundation",
+        "2026-09-29",
+        "M19",
+        "M19",
+        "visual system",
+        "M19 visual foundation",
+        added="Established visual tokens and reusable visual components.",
+        notes="M19.2 and M19.3 locked.",
     ),
     ProductGrowthEvent(
-        event_id="m20-workspace-ui",
-        date="2026-09-29",
-        kind="milestone",
-        title="M20 workspace product UI",
-        description="Locked the workspace visual product UI.",
-        version="M20",
+        "m20-workspace-ui",
+        "2026-09-29",
+        "M20",
+        "M20",
+        "workspace UI",
+        "M20 workspace product UI",
+        added="Established the workspace visual product UI.",
+        notes="Workspace UI locked.",
     ),
     ProductGrowthEvent(
-        event_id="m21-agent-interaction-ui",
-        date="2026-09-30",
-        kind="milestone",
-        title="M21 agent interaction UI",
-        description="Locked the Agent Interaction UI for the product task and execution workflow.",
-        version="M21",
+        "m21-agent-interaction-ui",
+        "2026-09-30",
+        "M21",
+        "M21",
+        "agent interaction",
+        "M21 Agent Interaction UI",
+        added="Established the Agent Interaction UI and task-to-result workflow presentation.",
+        notes="Agent Interaction UI locked.",
     ),
     ProductGrowthEvent(
-        event_id="m22-animation-visual-effects",
-        date="2026-09-30",
-        kind="milestone",
-        title="M22 animation and visual effects",
-        description="Locked the animation architecture and visual effects system.",
-        version="M22",
+        "m22-animation-visual-effects",
+        "2026-09-30",
+        "M22",
+        "M22",
+        "animation",
+        "M22 animation and visual effects",
+        added="Established animation architecture and visual effects.",
+        notes="M22.1 and M22 final integration locked.",
     ),
     ProductGrowthEvent(
-        event_id="m25-visual-system-runtime",
-        date="2026-10-01",
-        kind="milestone",
-        title="M25 visual system and product runtime",
-        description="Completed the M25 visual system and release integration, then locked the product runtime.",
-        version="M25",
+        "m25-visual-system-runtime",
+        "2026-10-01",
+        "M25",
+        "M25",
+        "runtime",
+        "M25 visual system and product runtime",
+        added="Completed visual system and release integration.",
+        changed="Finalized product runtime behavior.",
+        notes="M25 locked.",
     ),
     ProductGrowthEvent(
-        event_id="m26-2-global-ambient",
-        date="2026-10-01",
-        kind="milestone",
-        title="M26.2 global ambient visual system",
-        description="Locked the global ambient visual system.",
-        version="M26.2",
+        "m26-2-global-ambient",
+        "2026-10-01",
+        "M26.2",
+        "M26",
+        "ambient visuals",
+        "M26.2 global ambient visual system",
+        added="Established the global ambient visual system.",
     ),
     ProductGrowthEvent(
-        event_id="m26-3-theme-day-night",
-        date="2026-10-01",
-        kind="milestone",
-        title="M26.3 theme and day-night system",
-        description="Locked theme state and day-night visual behavior.",
-        version="M26.3",
+        "m26-3-theme-day-night",
+        "2026-10-01",
+        "M26.3",
+        "M26",
+        "theme",
+        "M26.3 theme and day-night system",
+        added="Established theme state and day/night visual behavior.",
     ),
     ProductGrowthEvent(
-        event_id="m26-4-opening-experience",
-        date="2026-10-01",
-        kind="milestone",
-        title="M26.4 opening experience",
-        description="Locked the product opening experience.",
-        version="M26.4",
+        "m26-4-opening-experience",
+        "2026-10-01",
+        "M26.4",
+        "M26",
+        "opening experience",
+        "M26.4 opening experience",
+        added="Established the product opening experience.",
     ),
     ProductGrowthEvent(
-        event_id="m26-5-daily-greeting",
-        date="2026-10-01",
-        kind="milestone",
-        title="M26.5 daily greeting system",
-        description="Locked the deterministic daily greeting system.",
-        version="M26.5",
+        "m26-5-daily-greeting",
+        "2026-10-01",
+        "M26.5",
+        "M26",
+        "daily greeting",
+        "M26.5 daily greeting system",
+        added="Established deterministic daily greeting behavior.",
     ),
     ProductGrowthEvent(
-        event_id="m26-6-automatic-loading",
-        date="2026-10-01",
-        kind="milestone",
-        title="M26.6 automatic loading",
-        description="Locked automatic loading and startup orchestration.",
-        version="M26.6",
+        "m26-6-automatic-loading",
+        "2026-10-01",
+        "M26.6",
+        "M26",
+        "startup",
+        "M26.6 automatic loading",
+        added="Established automatic loading and startup orchestration.",
     ),
     ProductGrowthEvent(
-        event_id="m26-7-unified-transition",
-        date="2026-10-02",
-        kind="milestone",
-        title="M26.7 unified transition system",
-        description="Locked the unified transition system.",
-        version="M26.7",
+        "m26-7-unified-transition",
+        "2026-10-02",
+        "M26.7",
+        "M26",
+        "transitions",
+        "M26.7 unified transition system",
+        added="Established the unified transition system.",
     ),
 )
 
