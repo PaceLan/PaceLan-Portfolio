@@ -7,6 +7,7 @@ from core.project_manager import ProjectManager
 from core.project_tree import ProjectTree, ProjectTreeNode
 from application.models import ProjectGoal, ProjectModel
 from application.project_metadata import ProjectMetadataService
+from application.project_storage import ProjectStorage
 from application.task_management import (
     ProductTask,
     TaskManagementService,
@@ -48,6 +49,7 @@ class ProjectWorkspaceService:
         self._project_path: Optional[Path] = None
         self._project_model: Optional[ProjectModel] = None
         self._task_service = TaskManagementService()
+        self._project_storage = ProjectStorage()
 
     @property
     def project_path(self) -> Optional[Path]:
@@ -147,10 +149,15 @@ class ProjectWorkspaceService:
         self._project_path = info["project_path"]
 
         if self._project_path is not None:
-            self._project_model = ProjectMetadataService.load(
-                self._project_path,
-                self._project_path.name,
-            )
+            if self._project_storage.exists(self._project_path):
+                self._project_model = self._project_storage.load(
+                    self._project_path
+                )
+            else:
+                self._project_model = ProjectMetadataService.load(
+                    self._project_path,
+                    self._project_path.name,
+                )
 
         if self._file_reader is None and self._project_path is not None:
             self._file_reader = FileReader(self._project_path)
@@ -254,9 +261,10 @@ class ProjectWorkspaceService:
         snapshot = SnapshotService(project_path).create_snapshot()
 
         if self._project_model is not None:
-            ProjectMetadataService.save(
+            self._project_storage.save(
                 self._project_model,
                 project_path,
+                name=project_path.name,
             )
 
         history_directory = project_path / "history"
