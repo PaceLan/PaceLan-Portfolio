@@ -1,4 +1,4 @@
-﻿import unittest
+import unittest
 
 from application.external_agent import (
     ExternalAgentRequest,
@@ -6,6 +6,7 @@ from application.external_agent import (
     ExternalConnectionState,
 )
 from application.external_agent_gateway import ExternalAgentGateway
+from application.runtime_authority import RuntimeAuthority
 from application.external_agent_transport import (
     ExternalAgentTransportState,
     ExternalAgentTransportStatus,
@@ -91,9 +92,11 @@ class TestExternalAgentGatewayC12(unittest.TestCase):
     def setUp(self):
         self.backend = _Backend()
         self.agent = UniversalAgentInterface(self.backend)
+        self.runtime_authority = RuntimeAuthority()
         self.gateway = ExternalAgentGateway(
             self.agent,
             workflow_id="project-1",
+            runtime_authority=self.runtime_authority,
         )
 
     def request(self):
@@ -212,9 +215,11 @@ class TestExternalAgentGatewayC15Transport(unittest.TestCase):
         backend = _Backend()
         agent = UniversalAgentInterface(backend)
         self.transport = _Transport()
+        self.runtime_authority = RuntimeAuthority()
         self.gateway = ExternalAgentGateway(
             agent,
             transport=self.transport,
+            runtime_authority=self.runtime_authority,
         )
 
     def test_connect_delegates_to_transport(self):
@@ -249,6 +254,7 @@ class TestExternalAgentGatewayC15Transport(unittest.TestCase):
         gateway = ExternalAgentGateway(
             UniversalAgentInterface(_Backend()),
             transport=transport,
+            runtime_authority=RuntimeAuthority(),
         )
 
         status = gateway.connect()
@@ -263,6 +269,12 @@ class TestExternalAgentGatewayC15Transport(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             gateway.send("hello")
+
+    def test_runtime_authority_is_required(self):
+        with self.assertRaises(TypeError):
+            ExternalAgentGateway(
+                UniversalAgentInterface(_Backend()),
+            )
 
     def test_send_delegates_to_connected_transport(self):
         self.gateway.connect()

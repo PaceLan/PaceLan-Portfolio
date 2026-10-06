@@ -5,6 +5,7 @@ from pathlib import Path
 from application.commands import ExecuteTaskCommand, ExecuteTaskHandler
 from application.models import ApplicationExecutionModel, TaskModel
 from application.services import ApplicationExecutionService
+from application.runtime_authority import RuntimeAuthority
 
 from agent_workflow.agent_service import AgentService
 from agent_workflow.project_context import ProjectContextBuilder
@@ -54,6 +55,7 @@ class ApplicationCommandM1874Tests(unittest.TestCase):
 
         execution_service = ApplicationExecutionService(
             agent_service,
+            runtime_authority=RuntimeAuthority(),
         )
 
         cls.handler = ExecuteTaskHandler(

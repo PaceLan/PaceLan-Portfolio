@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping, Tuple
 
+from application.verification import VerificationResult
+
 
 @dataclass(frozen=True)
 class ProjectGoal:
@@ -136,3 +138,4 @@ class ApplicationExecutionModel:
     run: RunModel
     result: ResultModel
     snapshot: SnapshotModel
+    verification: VerificationResult | None = None

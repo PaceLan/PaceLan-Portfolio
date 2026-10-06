@@ -6,6 +6,7 @@ from application.external_agent_bridge import (
     ExternalAgentMessageBridge,
 )
 from application.external_agent_gateway import ExternalAgentGateway
+from application.runtime_authority import RuntimeAuthority
 from application.universal_agent_interface import (
     AgentOperationRequest,
     AgentRuntimeState,
@@ -52,9 +53,11 @@ class TestExternalAgentMessageBridgeC16(unittest.TestCase):
     def setUp(self):
         self.backend = _Backend()
         self.agent = UniversalAgentInterface(self.backend)
+        self.runtime_authority = RuntimeAuthority()
         self.gateway = ExternalAgentGateway(
             self.agent,
             workflow_id="project-1",
+            runtime_authority=self.runtime_authority,
         )
         self.bridge = ExternalAgentMessageBridge(self.gateway)
         self.request = ExternalAgentRequest(

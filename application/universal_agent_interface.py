@@ -13,6 +13,7 @@ from types import MappingProxyType
 from typing import Protocol
 from uuid import uuid4
 
+from application.task_context import TaskContext
 from application.models import (
     ApplicationExecutionModel,
     PlanModel,
@@ -311,6 +312,20 @@ class UniversalAgentInterface:
                     step_ids=tuple(step.step_id for step in pending),
                 )
             return self._view(record)
+
+    def task_context(
+        self,
+        task_id: str,
+        *,
+        workflow_id: str | None = None,
+    ) -> TaskContext:
+        with self._lock:
+            record = self._require_task(task_id)
+            return TaskContext(
+                project_id=record.task.project_id,
+                task_id=record.task.task_id,
+                workflow_id=workflow_id,
+            )
 
     def inspect_task(self, task_id: str) -> AgentTaskView:
         with self._lock:

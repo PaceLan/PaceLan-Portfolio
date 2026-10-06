@@ -7,6 +7,7 @@ from application.external_agent import (
     ExternalAgentRequest,
     ExternalAgentResponse,
 )
+from application.draft_input_authority import DraftInputAuthority
 from application.external_agent_gateway import ExternalAgentGateway
 from application.universal_agent_interface import AgentOperationRequest
 
@@ -20,6 +21,7 @@ class ExternalAgentCommand(str, Enum):
     RESUME = "resume"
     STOP = "stop"
     RESULT = "result"
+    INSPECT_RUNTIME = "inspect_runtime"
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,7 @@ class ExternalAgentMessageBridge:
         if not isinstance(gateway, ExternalAgentGateway):
             raise TypeError("gateway must be an ExternalAgentGateway")
         self._gateway = gateway
+        self._draft_input_authority = DraftInputAuthority()
 
     @property
     def gateway(self) -> ExternalAgentGateway:
@@ -54,7 +57,16 @@ class ExternalAgentMessageBridge:
             raise TypeError("command must be an ExternalAgentCommand")
 
         if command is ExternalAgentCommand.CREATE_TASK:
-            value = self._gateway.create_task(request)
+            draft = self._draft_input_authority.accept(
+                request.payload,
+                source="external_bridge",
+            )
+            draft_request = ExternalAgentRequest(
+                task_id=request.task_id,
+                payload=draft.content,
+                workflow_id=request.workflow_id,
+            )
+            value = self._gateway.create_task(draft_request)
         elif command is ExternalAgentCommand.SUBMIT_TASK:
             value = self._gateway.submit_task(request, operations)
         elif command is ExternalAgentCommand.INSPECT_TASK:
@@ -69,6 +81,8 @@ class ExternalAgentMessageBridge:
             value = self._gateway.stop(request)
         elif command is ExternalAgentCommand.RESULT:
             value = self._gateway.result(request)
+        elif command is ExternalAgentCommand.INSPECT_RUNTIME:
+            value = self._gateway.inspect_runtime()
         else:
             raise ValueError(f"unsupported external Agent command: {command}")
 

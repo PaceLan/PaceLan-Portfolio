@@ -1,4 +1,4 @@
-﻿"""Application bootstrap for the PacePilot product shell."""
+"""Application bootstrap for the PacePilot product shell."""
 
 from dataclasses import dataclass
 from enum import Enum
@@ -8,6 +8,8 @@ from typing import Optional, Union
 from agent_workflow.agent_service import AgentService
 from agent_workflow.workflow_core import AgentWorkflow
 from agent_workflow.workflow_service import WorkflowService
+from application.runtime_authority import RuntimeAuthority
+from application.unified_control_loop import UnifiedControlLoop
 from application.services import ApplicationExecutionService
 from application.workspace import ProjectWorkspaceService
 from history.history_core import HistoryStore
@@ -34,6 +36,8 @@ class BootstrapError:
 class ApplicationRuntime:
     agent_service: AgentService
     execution_service: ApplicationExecutionService
+    runtime_authority: RuntimeAuthority
+    control_loop: UnifiedControlLoop
     workspace_service: ProjectWorkspaceService
     state: BootstrapState
     lifecycle: tuple[BootstrapState, ...]
@@ -93,9 +97,22 @@ class ApplicationBootstrap:
         if not isinstance(agent_service, AgentService):
             raise TypeError("agent_service must be an AgentService")
 
+        runtime_authority = RuntimeAuthority()
+        execution_service = ApplicationExecutionService(
+            agent_service,
+            project_path=root,
+            runtime_authority=runtime_authority,
+        )
+        control_loop = UnifiedControlLoop(
+            execution_service,
+            runtime_authority,
+        )
+
         return ApplicationRuntime(
             agent_service=agent_service,
-            execution_service=ApplicationExecutionService(agent_service),
+            execution_service=execution_service,
+            runtime_authority=runtime_authority,
+            control_loop=control_loop,
             workspace_service=ProjectWorkspaceService(),
             state=BootstrapState.READY,
             lifecycle=lifecycle + (BootstrapState.READY,),

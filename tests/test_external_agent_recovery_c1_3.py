@@ -9,6 +9,7 @@ from application.external_agent import (
     ExternalConnectionState,
 )
 from application.external_agent_gateway import ExternalAgentGateway
+from application.runtime_authority import RuntimeAuthority
 from application.external_agent_recovery import (
     ExternalAgentRecoveryService,
     ExternalRecoveryState,
@@ -108,9 +109,11 @@ class TestExternalAgentRecoveryC13(unittest.TestCase):
     def setUp(self):
         self.backend = _Backend()
         self.agent = UniversalAgentInterface(self.backend)
+        self.runtime_authority = RuntimeAuthority()
         self.gateway = ExternalAgentGateway(
             self.agent,
             workflow_id="project-c1",
+            runtime_authority=self.runtime_authority,
         )
         self.recovery = ExternalAgentRecoveryService(self.gateway)
 

@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from core.file_reader import FileReader
 from core.project_manager import ProjectManager
 from core.project_tree import ProjectTree, ProjectTreeNode
+from application.goal_authority import GoalAuthority
+from application.goal_confirmation_flow import GoalAnalysis, GoalConfirmationFlow
+from application.goal_confirmation_flow import GoalAnalysis, GoalConfirmationFlow
 from application.models import ProjectGoal, ProjectModel
 from application.project_metadata import ProjectMetadataService
 from application.project_storage import ProjectStorage
@@ -50,6 +53,8 @@ class ProjectWorkspaceService:
         self._project_model: Optional[ProjectModel] = None
         self._task_service = TaskManagementService()
         self._project_storage = ProjectStorage()
+        self._goal_authority = GoalAuthority()
+        self._goal_confirmation_flow = GoalConfirmationFlow()
 
     @property
     def project_path(self) -> Optional[Path]:
@@ -107,9 +112,11 @@ class ProjectWorkspaceService:
         return self._task_service.attach_plan(task_id, plan_id)
 
     def submit_task(self, task_id: str) -> ProductTask:
+        self._goal_authority.require_confirmed()
         return self._task_service.submit(task_id)
 
     def start_task(self, task_id: str) -> ProductTask:
+        self._goal_authority.require_confirmed()
         return self._task_service.start(task_id)
 
     def complete_task(self, task_id: str) -> ProductTask:
@@ -130,6 +137,45 @@ class ProjectWorkspaceService:
             return None
         return self._project_model.goal
 
+    @property
+    def goal_confirmed(self) -> bool:
+        return self._goal_authority.confirmed
+
+    def confirm_project_goal(self) -> ProjectGoal:
+        return self._goal_authority.confirm()
+
+    def revise_goal_analysis(
+        self,
+        analysis: GoalAnalysis,
+        *,
+        revised_text: str | None = None,
+        accepted_suggestions: tuple[str, ...] = (),
+    ) -> GoalAnalysis:
+        if self._project_model is None:
+            raise ValueError(
+                "A valid project must be open before revising a goal"
+            )
+
+        return self._goal_confirmation_flow.revise(
+            analysis,
+            revised_text=revised_text,
+            accepted_suggestions=accepted_suggestions,
+        )
+
+    def confirm_goal_analysis(self, analysis: GoalAnalysis) -> ProjectGoal:
+        if self._project_model is None:
+            raise ValueError(
+                "A valid project must be open before confirming a goal"
+            )
+
+        confirmation = self._goal_confirmation_flow.confirm(analysis)
+        self._project_model = ProjectModel(
+            project_id=self._project_model.project_id,
+            goal=confirmation.goal,
+        )
+        self._goal_authority.set_goal(confirmation.goal)
+        return self._goal_authority.confirm()
+
     def update_project_goal(self, goal: str) -> ProjectGoal:
         if self._project_model is None:
             raise ValueError(
@@ -141,12 +187,15 @@ class ProjectWorkspaceService:
             project_id=self._project_model.project_id,
             goal=normalized_goal,
         )
+        self._goal_authority.set_goal(normalized_goal)
         return normalized_goal
 
     def open_project(self, path: Union[str, Path]) -> dict[str, object]:
         self.project_manager.open_project(path)
         info = self.project_manager.get_project_info()
         self._project_path = info["project_path"]
+
+        self._goal_authority.clear()
 
         if self._project_path is not None:
             if self._project_storage.exists(self._project_path):
@@ -158,6 +207,9 @@ class ProjectWorkspaceService:
                     self._project_path,
                     self._project_path.name,
                 )
+
+            if self._project_model.goal.text.strip():
+                self._goal_authority.set_goal(self._project_model.goal)
 
         if self._file_reader is None and self._project_path is not None:
             self._file_reader = FileReader(self._project_path)
@@ -235,6 +287,7 @@ class ProjectWorkspaceService:
         self._file_reader = None
         self._tree_provider = None
         self._task_service = TaskManagementService()
+        self._goal_authority.clear()
         self.project_manager = type(self.project_manager)()
 
     def persist_project(self):

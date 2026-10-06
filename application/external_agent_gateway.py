@@ -9,6 +9,8 @@ from application.external_agent import (
     ExternalConnectionReason,
     ExternalConnectionState,
 )
+from application.runtime_authority import RuntimeAuthority
+from application.runtime_control import RuntimeControlState
 from application.external_agent_transport import (
     ExternalAgentTransport,
     ExternalAgentTransportStatus,
@@ -35,12 +37,17 @@ class ExternalAgentGateway:
         *,
         workflow_id: str | None = None,
         transport: ExternalAgentTransport | None = None,
+        runtime_authority: RuntimeAuthority,
     ) -> None:
         if not isinstance(agent, UniversalAgentInterface):
             raise TypeError("agent must be a UniversalAgentInterface")
 
         self._agent = agent
         self._workflow_id = workflow_id
+        if not isinstance(runtime_authority, RuntimeAuthority):
+            raise TypeError("runtime_authority must be a RuntimeAuthority")
+
+        self._runtime_authority = runtime_authority
         self._transport = transport
         self._transport_status = (
             transport.status()
@@ -54,6 +61,10 @@ class ExternalAgentGateway:
     @property
     def agent(self) -> UniversalAgentInterface:
         return self._agent
+
+    @property
+    def runtime_authority(self) -> RuntimeAuthority:
+        return self._runtime_authority
 
     @property
     def transport(self) -> ExternalAgentTransport | None:
@@ -194,25 +205,51 @@ class ExternalAgentGateway:
     def start(self, request: ExternalAgentRequest):
         self._require_connected()
         self._require_task_id(request)
-        return self._agent.start(request.task_id)
+        self._runtime_authority.start()
+        try:
+            return self._agent.start(request.task_id)
+        except Exception:
+            self._runtime_authority.reset()
+            raise
 
     def pause(self, request: ExternalAgentRequest):
         self._require_connected()
         self._require_task_id(request)
-        return self._agent.pause(request.task_id)
+        self._runtime_authority.pause()
+        try:
+            return self._agent.pause(request.task_id)
+        except Exception:
+            self._runtime_authority.resume()
+            raise
 
     def resume(self, request: ExternalAgentRequest):
         self._require_connected()
         self._require_task_id(request)
-        return self._agent.resume(request.task_id)
+        self._runtime_authority.resume()
+        try:
+            return self._agent.resume(request.task_id)
+        except Exception:
+            self._runtime_authority.pause()
+            raise
 
     def stop(self, request: ExternalAgentRequest):
         self._require_connected()
         self._require_task_id(request)
-        return self._agent.stop(request.task_id)
+        previous_state = self._runtime_authority.state()
+        self._runtime_authority.terminate()
+        try:
+            return self._agent.stop(request.task_id)
+        except Exception:
+            self._runtime_authority.reset()
+            if previous_state is RuntimeControlState.PAUSED:
+                self._runtime_authority.start()
+                self._runtime_authority.pause()
+            else:
+                self._runtime_authority.start()
+            raise
 
     def inspect_runtime(self):
-        return self._agent.inspect_runtime()
+        return self._runtime_authority.view()
 
     def inspect_execution(self, request: ExternalAgentRequest):
         return self._agent.inspect_execution(request.task_id)

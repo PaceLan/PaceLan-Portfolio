@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from application.runtime_authority import RuntimeAuthority
 from application import (
     PlanModel,
     ResultModel,
@@ -58,7 +59,10 @@ class ApplicationExecutionFacadeM1865Tests(unittest.TestCase):
             project_context_agent=agent,
         )
 
-        cls.service = ApplicationExecutionService(agent_service)
+        cls.service = ApplicationExecutionService(
+            agent_service,
+            runtime_authority=RuntimeAuthority(),
+        )
 
     @classmethod
     def tearDownClass(cls):

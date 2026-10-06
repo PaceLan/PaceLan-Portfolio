@@ -1,4 +1,4 @@
-"""Application-layer runtime controls for active Agent execution."""
+﻿"""Application-layer runtime controls for active Agent execution."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ class RuntimeControlState(str, Enum):
 
 
 class RuntimeControlTarget(Protocol):
+    def start_runtime(self) -> None: ...
     def pause_runtime(self) -> None: ...
     def resume_runtime(self) -> None: ...
     def terminate_runtime(self) -> None: ...
@@ -37,6 +38,14 @@ class ApplicationRuntimeControlService:
 
     def _state(self) -> RuntimeControlState:
         return RuntimeControlState(self._target.runtime_state())
+
+    def start(self) -> RuntimeControlResult:
+        self._target.start_runtime()
+        return RuntimeControlResult(
+            action="start",
+            state=self._state(),
+            accepted=True,
+        )
 
     def pause(self) -> RuntimeControlResult:
         self._target.pause_runtime()
@@ -68,3 +77,11 @@ class ApplicationRuntimeControlService:
             state=self._state(),
             accepted=True,
         )
+
+
+__all__ = [
+    "ApplicationRuntimeControlService",
+    "RuntimeControlResult",
+    "RuntimeControlState",
+    "RuntimeControlTarget",
+]

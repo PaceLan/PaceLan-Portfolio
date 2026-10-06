@@ -1,6 +1,7 @@
 """Application-layer services for product-facing orchestration."""
 
 from collections.abc import Iterable
+from pathlib import Path
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Event, RLock
 
@@ -24,10 +25,16 @@ from agent_workflow.workflow_core import WorkflowTask
 from agent_workflow.workflow_plan import WorkflowPlan, WorkflowStep
 from agent_workflow.workflow_result import WorkflowResult
 
+from .execution_verification import ExecutionVerificationValidator
+from .unified_control_validator import UnifiedControlValidator
+from .runtime_authority import RuntimeAuthority
 from .runtime_control import (
     ApplicationRuntimeControlService,
     RuntimeControlState,
 )
+from .history_recorder import AgentHistoryRecorder
+from .history_storage import AgentHistoryStorage
+from .verification import VerificationService
 
 from .models import (
     ApplicationExecutionModel,
@@ -431,6 +438,10 @@ class ApplicationExecutionService:
     def __init__(
         self,
         agent_service: AgentService,
+        *,
+        project_path: str | Path | None = None,
+        history_recorder: AgentHistoryRecorder | None = None,
+        runtime_authority: RuntimeAuthority | None = None,
     ) -> None:
         if not isinstance(agent_service, AgentService):
             raise TypeError(
@@ -438,6 +449,30 @@ class ApplicationExecutionService:
             )
 
         self._agent_service = agent_service
+        self._project_path = (
+            Path(project_path).resolve()
+            if project_path is not None
+            else None
+        )
+        if self._project_path is not None:
+            if not self._project_path.exists() or not self._project_path.is_dir():
+                raise ValueError("project_path must be an existing directory")
+
+        if history_recorder is not None and not isinstance(
+            history_recorder,
+            AgentHistoryRecorder,
+        ):
+            raise TypeError(
+                "history_recorder must be an AgentHistoryRecorder"
+            )
+
+        self._history_recorder = history_recorder
+        if self._history_recorder is None and self._project_path is not None:
+            self._history_recorder = AgentHistoryRecorder(
+                storage=AgentHistoryStorage(),
+                project_path=self._project_path,
+            )
+
         self._executor = ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="pacepilot-agent",
@@ -447,7 +482,11 @@ class ApplicationExecutionService:
         self._resume_gate = Event()
         self._resume_gate.set()
         self._terminate_requested = Event()
-        self._runtime_state = RuntimeControlState.IDLE
+        if not isinstance(runtime_authority, RuntimeAuthority):
+            raise TypeError(
+                "runtime_authority must be a RuntimeAuthority"
+            )
+        self._runtime_authority = runtime_authority
         self.runtime_control = ApplicationRuntimeControlService(
             self,
         )
@@ -491,48 +530,35 @@ class ApplicationExecutionService:
     def runtime_status(self):
         return self.runtime_control.status()
 
+    @property
+    def runtime_authority(self) -> RuntimeAuthority:
+        return self._runtime_authority
+
     def pause_runtime(self) -> None:
-        with self._runtime_lock:
-            if self._runtime_state is not RuntimeControlState.RUNNING:
-                raise RuntimeError("agent execution is not running")
-            self._runtime_state = RuntimeControlState.PAUSED
-            self._resume_gate.clear()
+        self._runtime_authority.pause()
+        self._resume_gate.clear()
 
     def resume_runtime(self) -> None:
-        with self._runtime_lock:
-            if self._runtime_state is not RuntimeControlState.PAUSED:
-                raise RuntimeError("agent execution is not paused")
-            self._runtime_state = RuntimeControlState.RUNNING
-            self._resume_gate.set()
+        self._runtime_authority.resume()
+        self._resume_gate.set()
 
     def terminate_runtime(self) -> None:
-        with self._runtime_lock:
-            if self._runtime_state not in {
-                RuntimeControlState.RUNNING,
-                RuntimeControlState.PAUSED,
-            }:
-                raise RuntimeError("agent execution is not active")
-            self._terminate_requested.set()
-            self._runtime_state = RuntimeControlState.TERMINATED
-            self._resume_gate.set()
+        self._runtime_authority.terminate()
+        self._terminate_requested.set()
+        self._resume_gate.set()
 
     def runtime_state(self) -> str:
-        with self._runtime_lock:
-            return self._runtime_state.value
+        return self._runtime_authority.state().value
 
     def _begin_runtime(self) -> None:
         with self._runtime_lock:
             self._terminate_requested.clear()
             self._resume_gate.set()
-            self._runtime_state = RuntimeControlState.RUNNING
+            self._runtime_authority.start()
 
     def _finish_runtime(self) -> None:
         with self._runtime_lock:
-            self._runtime_state = (
-                RuntimeControlState.TERMINATED
-                if self._terminate_requested.is_set()
-                else RuntimeControlState.IDLE
-            )
+            self._runtime_authority.reset()
             self._resume_gate.set()
 
     def _controlled_step(self, step: WorkflowStep) -> WorkflowStep:
@@ -560,11 +586,10 @@ class ApplicationExecutionService:
         if not isinstance(task, TaskModel):
             raise TypeError("task must be a TaskModel")
 
-        with self._runtime_lock:
-            runtime_started = self._runtime_state in {
-                RuntimeControlState.RUNNING,
-                RuntimeControlState.PAUSED,
-            }
+        runtime_started = self._runtime_authority.state().value in {
+            RuntimeControlState.RUNNING.value,
+            RuntimeControlState.PAUSED.value,
+        }
         if not runtime_started:
             self._begin_runtime()
 
@@ -606,10 +631,32 @@ class ApplicationExecutionService:
             execution.snapshot,
         )
 
-        return ApplicationExecutionModel(
+        verification = VerificationService.verify(execution.result)
+        ExecutionVerificationValidator.validate(
+            application_run,
+            application_result,
+            verification,
+        )
+
+        application_execution = ApplicationExecutionModel(
             task=application_task,
             plan=application_plan,
             run=application_run,
             result=application_result,
             snapshot=application_snapshot,
+            verification=verification,
         )
+
+        UnifiedControlValidator.validate(
+            application_execution,
+            self._runtime_authority,
+        )
+
+        if self._history_recorder is not None:
+            self._history_recorder.record_execution(
+                application_execution,
+                verification,
+                history_id=application_run.run_id,
+            )
+
+        return application_execution

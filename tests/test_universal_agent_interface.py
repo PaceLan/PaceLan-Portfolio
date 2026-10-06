@@ -22,6 +22,7 @@ from application.models import (
 )
 from application.runtime_control import RuntimeControlResult, RuntimeControlState
 from application.services import ApplicationExecutionService
+from application.runtime_authority import RuntimeAuthority
 from application.universal_agent_backend import (
     AgentServiceUnderstandingProvider,
     ApplicationExecutionBackend,
@@ -410,7 +411,8 @@ class LocalExecutionRuntimeIntegrationTests(unittest.TestCase):
             ),
         )
         self.execution_service = ApplicationExecutionService(
-            AgentService(WorkflowService(workflow))
+            AgentService(WorkflowService(workflow)),
+            runtime_authority=RuntimeAuthority(),
         )
 
     def tearDown(self):
