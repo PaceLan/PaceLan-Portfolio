@@ -25,7 +25,7 @@ from agent_workflow.workflow_core import WorkflowTask
 from agent_workflow.workflow_plan import WorkflowPlan, WorkflowStep
 from agent_workflow.workflow_result import WorkflowResult
 
-from .execution_verification import ExecutionVerificationValidator
+from .execution_verification_trigger import ExecutionVerificationTrigger
 from .unified_control_validator import UnifiedControlValidator
 from .runtime_authority import RuntimeAuthority
 from .runtime_control import (
@@ -34,7 +34,6 @@ from .runtime_control import (
 )
 from .history_recorder import AgentHistoryRecorder
 from .history_storage import AgentHistoryStorage
-from .verification import VerificationService
 
 from .models import (
     ApplicationExecutionModel,
@@ -631,11 +630,10 @@ class ApplicationExecutionService:
             execution.snapshot,
         )
 
-        verification = VerificationService.verify(execution.result)
-        ExecutionVerificationValidator.validate(
+        verification = ExecutionVerificationTrigger.verify(
+            execution.result,
             application_run,
             application_result,
-            verification,
         )
 
         application_execution = ApplicationExecutionModel(

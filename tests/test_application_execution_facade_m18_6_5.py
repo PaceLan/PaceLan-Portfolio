@@ -1,7 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from agent_workflow.workflow_result import WorkflowResult
 from application.runtime_authority import RuntimeAuthority
 from application import (
     PlanModel,
@@ -223,6 +225,31 @@ class ApplicationExecutionFacadeM1865Tests(unittest.TestCase):
             execution.result.run_id,
             execution.snapshot.run_id,
         )
+
+    def test_execution_automatically_triggers_verification(self):
+        task = TaskModel(
+            task_id="task-c4-8-trigger",
+            project_id="project-c4-8",
+        )
+
+        with patch(
+            "application.services.ExecutionVerificationTrigger.verify",
+            wraps=__import__(
+                "application.execution_verification_trigger",
+                fromlist=["ExecutionVerificationTrigger"],
+            ).ExecutionVerificationTrigger.verify,
+        ) as trigger:
+            execution = self.service.run(task)
+
+        self.assertIsInstance(execution, ApplicationExecutionModel)
+        trigger.assert_called_once()
+        self.assertIsInstance(
+            trigger.call_args.args[0],
+            WorkflowResult,
+        )
+        self.assertIs(execution.run, trigger.call_args.args[1])
+        self.assertIs(execution.result, trigger.call_args.args[2])
+        self.assertIsNotNone(execution.verification)
 
     def test_verification_is_verified_after_successful_execution(self):
         task = TaskModel(
