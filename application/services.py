@@ -25,6 +25,10 @@ from agent_workflow.workflow_core import WorkflowTask
 from agent_workflow.workflow_plan import WorkflowPlan, WorkflowStep
 from agent_workflow.workflow_result import WorkflowResult
 
+from .automatic_result_classifier import (
+    AutomaticResultClassifier,
+    ResultClassificationEvidence,
+)
 from .execution_verification_trigger import ExecutionVerificationTrigger
 from .unified_control_validator import UnifiedControlValidator
 from .runtime_authority import RuntimeAuthority
@@ -635,6 +639,32 @@ class ApplicationExecutionService:
             application_run,
             application_result,
         )
+
+        result_status = (
+            execution.result.status.value
+            if hasattr(execution.result.status, "value")
+            else str(execution.result.status)
+        ).upper()
+
+        if result_status in {"COMPLETED", "FAILED", "BLOCKED"}:
+            classification = AutomaticResultClassifier.classify(
+                execution.result,
+                ResultClassificationEvidence(
+                    approval_statuses=tuple(
+                        step.approval
+                        for step in application_plan.steps
+                        if step.approval
+                    )
+                ),
+            )
+
+            if classification.value not in {
+                "SUCCESS",
+                "FAILED",
+                "BLOCKED",
+                "DENIED",
+            }:
+                raise RuntimeError("invalid automatic result classification")
 
         application_execution = ApplicationExecutionModel(
             task=application_task,

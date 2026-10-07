@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+from application.task_context import TaskContext
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
@@ -55,6 +56,13 @@ class ExternalAgentRequest:
     task_id: str
     payload: str
     workflow_id: str | None = None
+
+    def to_task_context(self, project_id: str) -> TaskContext:
+        return TaskContext(
+            project_id=project_id,
+            task_id=self.task_id,
+            workflow_id=self.workflow_id,
+        )
 
 
 @dataclass(frozen=True)
