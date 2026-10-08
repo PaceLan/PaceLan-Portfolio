@@ -28,6 +28,8 @@ class DesktopShellM234Tests(unittest.TestCase):
         agent_service = MagicMock()
         runtime = MagicMock()
         runtime.agent_service = agent_service
+        execution_service = MagicMock()
+        runtime.execution_service = execution_service
 
         with patch(
             "ui.app_entry.create_runtime",
@@ -47,6 +49,7 @@ class DesktopShellM234Tests(unittest.TestCase):
             project_root=Path("."),
             controller=None,
             agent_service=agent_service,
+            execution_service=execution_service,
         )
 
     def test_create_app_without_project_root_preserves_agent_service(self):
@@ -67,33 +70,26 @@ class DesktopShellM234Tests(unittest.TestCase):
             project_root=None,
             controller=None,
             agent_service=agent_service,
+            execution_service=None,
         )
 
     def test_main_creates_tk_root_and_enters_mainloop(self):
         root = MagicMock()
-        runtime = MagicMock()
-        runtime.agent_service = MagicMock()
 
         with patch("ui.app_entry.tk.Tk", return_value=root), patch(
-            "ui.app_entry.create_runtime",
-            return_value=runtime,
-        ) as create_runtime, patch(
-            "ui.app_entry.create_app"
-        ) as create:
+            "ui.app_entry.StartupCoordinator"
+        ) as coordinator_cls:
             app_entry.main()
 
-        create_runtime.assert_called_once()
-        create.assert_called_once_with(
-            root,
-            agent_service=runtime.agent_service,
-        )
+        coordinator_cls.assert_called_once()
+        coordinator_cls.return_value.start.assert_called_once_with()
         root.mainloop.assert_called_once_with()
 
     def test_main_reports_project_startup_failure(self):
         root = MagicMock()
 
         with patch("ui.app_entry.tk.Tk", return_value=root), patch(
-            "ui.app_entry.create_app",
+            "ui.app_entry.StartupCoordinator",
             side_effect=ValueError("invalid project"),
         ), patch("ui.app_entry.messagebox.showerror") as showerror:
             app_entry.main()

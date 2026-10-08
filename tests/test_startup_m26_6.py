@@ -20,8 +20,11 @@ class StartupCoordinatorM266Tests(unittest.TestCase):
             events.append("runtime")
             return fake_runtime
 
+        app_calls = []
+
         def create_app(*args, **kwargs):
             events.append("visual")
+            app_calls.append((args, kwargs))
             return fake_app
 
         def create_opening(*args, **kwargs):
@@ -39,6 +42,15 @@ class StartupCoordinatorM266Tests(unittest.TestCase):
             ["runtime", "visual", "opening", "opening.start"],
         )
         root.after_idle.assert_called_once()
+        self.assertEqual(len(app_calls), 1)
+        self.assertIs(
+            app_calls[0][1]["execution_service"],
+            fake_runtime.execution_service,
+        )
+        self.assertIs(
+            app_calls[0][1]["agent_service"],
+            fake_runtime.agent_service,
+        )
 
     def test_initialization_continues_through_event_loop(self):
         root = Mock()

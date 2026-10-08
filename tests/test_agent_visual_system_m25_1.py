@@ -11,6 +11,7 @@ from agent_workflow.workflow_plan import WorkflowStep
 from agent_workflow.workflow_service import WorkflowService
 from application.models import TaskModel
 from application.services import ApplicationExecutionService
+from application.runtime_authority import RuntimeAuthority
 from history.history_core import HistoryStore
 from snapshots.snapshot_core import SnapshotStore
 from snapshots.snapshot_service import SnapshotService
@@ -261,7 +262,10 @@ class M251AgentVisualSystemTests(unittest.TestCase):
                         ),
                     )
                     agent_service = AgentService(WorkflowService(workflow))
-                    execution_service = ApplicationExecutionService(agent_service)
+                    execution_service = ApplicationExecutionService(
+                        agent_service,
+                        runtime_authority=RuntimeAuthority(),
+                    )
 
                     def action():
                         if should_fail:

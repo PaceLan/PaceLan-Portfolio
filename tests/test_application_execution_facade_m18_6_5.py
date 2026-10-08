@@ -4,7 +4,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from agent_workflow.workflow_result import WorkflowResult
+from agent_workflow.workflow_core import WorkflowStatus
 from application.runtime_authority import RuntimeAuthority
+from application.automatic_result_classifier import AutomaticResultClassifier
 from application import (
     PlanModel,
     ResultModel,
@@ -322,6 +324,41 @@ class ApplicationExecutionFacadeM1865Tests(unittest.TestCase):
         self.assertEqual(
             execution.verification.run_id,
             execution.result.run_id,
+        )
+
+    def test_terminal_execution_automatically_classifies_result(self):
+        task = TaskModel(
+            task_id="task-c4-9-classification",
+            project_id="project-c4-9",
+        )
+        step = WorkflowStep(
+            operation="blocked",
+            action=lambda: "should not execute",
+            risk=RiskLevel.SAFE,
+            approval=ApprovalStatus.BLOCKED,
+            step_id="classification-blocked-step",
+        )
+
+        with patch(
+            "application.services.AutomaticResultClassifier.classify",
+            wraps=AutomaticResultClassifier.classify,
+        ) as classifier:
+            execution = self.service.run(task, steps=(step,))
+
+        classifier.assert_called_once()
+        classified_result = classifier.call_args.args[0]
+        self.assertEqual(
+            classified_result.run_id,
+            execution.result.run_id,
+        )
+        self.assertEqual(
+            classified_result.status,
+            WorkflowStatus.BLOCKED,
+        )
+        evidence = classifier.call_args.args[1]
+        self.assertEqual(
+            evidence.approval_statuses,
+            (ApprovalStatus.BLOCKED,),
         )
 
     def test_application_execution_model_is_immutable(self):

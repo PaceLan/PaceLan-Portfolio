@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 from ui.app import CodingAssistantApp
 from ui.unified_transition import UnifiedTransitionKind
+from ui.panel_transitions import TransitionDirection, TransitionPrimitive
 
 
 class M267AppTransitionWiringTests(unittest.TestCase):
@@ -99,6 +100,8 @@ class M267AppTransitionWiringTests(unittest.TestCase):
         start.assert_called_once_with(
             UnifiedTransitionKind.WORKSPACE,
             "workspace",
+            direction=TransitionDirection.NONE,
+            primitive=TransitionPrimitive.CROSS_FADE,
         )
         enter.assert_called_once()
         complete.assert_called_once()
@@ -142,8 +145,10 @@ class M267AppTransitionWiringTests(unittest.TestCase):
         self.assertIs(result, state)
 
         start.assert_called_once_with(
-            UnifiedTransitionKind.GREETING,
+            UnifiedTransitionKind.AGENT,
             "agent",
+            direction=TransitionDirection.NONE,
+            primitive=TransitionPrimitive.FOCUS_DEPTH,
         )
         enter.assert_called_once()
         complete.assert_called_once()

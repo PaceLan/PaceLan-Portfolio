@@ -10,6 +10,7 @@ from application.bootstrap import (
     ApplicationRuntime,
     BootstrapState,
 )
+from application.runtime_authority import RuntimeAuthority
 from application.services import ApplicationExecutionService
 from application.workspace import ProjectWorkspaceService
 from history.history_core import HistoryStore
@@ -50,6 +51,14 @@ class TestM23_2ApplicationBootstrap(unittest.TestCase):
         self.assertIsInstance(
             runtime.execution_service,
             ApplicationExecutionService,
+        )
+        self.assertIsInstance(
+            runtime.runtime_authority,
+            RuntimeAuthority,
+        )
+        self.assertIs(
+            runtime.execution_service.runtime_authority,
+            runtime.runtime_authority,
         )
 
     def test_create_reuses_supplied_agent_service(self):
