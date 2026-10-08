@@ -40,7 +40,6 @@ from ui.visual_system import (
     AgentVisualSystem,
     StageEffect,
 )
-from ui.pointer_visuals import PointerVisualLayer
 from ui.workspace_empty_state import WorkspaceEmptyState
 
 
@@ -534,100 +533,3 @@ class M251ShellVisualFoundationTests(unittest.TestCase):
         self.assertIsNone(app.empty_state._ambient_after)
         self.assertIsNone(app.agent_panel.visual_system.idle_outline._after_id)
         self.assertTrue(accessibility.reduced_motion)
-
-    def test_pointer_motion_uses_tk_loop_and_focus_loss_clears_glow(self):
-        self.root.deiconify()
-        self.root.geometry("1000x700")
-        app = CodingAssistantApp(self.root)
-        self.root.focus_force()
-        self.root.update()
-        layer = app.pointer_layer
-
-        self.assertTrue(layer.enabled)
-        self.assertTrue(layer.focused)
-        self.assertIn(str(app.header_frame), layer._surfaces)
-        self.assertIn(str(app.project_panel), layer._surfaces)
-        self.assertIn(str(app.workspace_panel), layer._surfaces)
-        self.assertIn(str(app.agent_panel), layer._surfaces)
-        self.assertIn(str(app.empty_state), layer._surfaces)
-        self.assertIn(str(app.tree_view), layer._surfaces)
-
-        app.empty_state.event_generate(
-            "<Motion>",
-            x=max(1, app.empty_state.winfo_width() // 2),
-            y=max(1, app.empty_state.winfo_height() // 2),
-            warp=True,
-        )
-        self.assertIsNotNone(layer._after_id)
-        self.root.after(100, self.root.quit)
-        self.root.mainloop()
-
-        self.assertGreater(app.empty_state._pointer_intensity, 0)
-        self.assertIsNotNone(app.empty_state._pointer_items)
-        self.root.event_generate("<FocusOut>")
-        self.root.update()
-        self.assertFalse(layer.focused)
-        self.assertEqual(app.empty_state._pointer_intensity, 0)
-
-    def test_reduced_motion_disables_pointer_bindings_and_dispatch(self):
-        accessibility = AnimationAccessibility(
-            MotionPolicy(mode=MotionMode.REDUCED)
-        )
-        app = CodingAssistantApp(
-            self.root,
-            accessibility=accessibility,
-        )
-
-        self.assertFalse(app.pointer_layer.enabled)
-        self.assertIsNone(app.pointer_layer._after_id)
-        self.assertIsNone(app.empty_state._ambient_after)
-
-    def test_pointer_highlight_is_local_to_primary_and_agent_surfaces(self):
-        self.root.deiconify()
-        self.root.geometry("1000x700")
-        app = CodingAssistantApp(self.root)
-        self.root.focus_force()
-        self.root.update()
-
-        app.open_project_button.event_generate(
-            "<Motion>",
-            x=4,
-            y=4,
-            warp=True,
-        )
-        self.root.after(100, self.root.quit)
-        self.root.mainloop()
-
-        self.assertIn("Pointer", app.open_project_button.cget("style"))
-        self.assertEqual(
-            app.project_panel.cget("style"),
-            "PacePilot.Panel.TLabelframe",
-        )
-
-        task_heading = app.agent_panel._stage_titles[AgentStage.TASK]
-        task_heading.event_generate(
-            "<Motion>",
-            x=4,
-            y=4,
-            warp=True,
-        )
-        self.root.after(100, self.root.quit)
-        self.root.mainloop()
-
-        self.assertIsNotNone(app.pointer_layer._current)
-        self.assertEqual(
-            app.pointer_layer._current.widget,
-            app.agent_panel._stage_frames[AgentStage.TASK],
-        )
-        self.assertGreater(
-            app.agent_panel.visual_system.outlines[AgentStage.TASK]._pointer_intensity,
-            0,
-        )
-        self.assertEqual(
-            app.agent_panel.visual_system.outlines[AgentStage.PLAN].effect,
-            StageEffect.REST,
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -25,6 +25,15 @@ class AmbientRuntime:
         self._after = None
         self._phase = 0.0
 
+    def register_surface(self, widget) -> None:
+        """Compatibility hook for VisualExperience surface registration.
+
+        The baseline ambient runtime renders one global canvas behind the
+        complete application, so individual surface registration is not
+        required.
+        """
+        return
+
     def build(self) -> None:
         if self.canvas is not None:
             return
@@ -51,6 +60,11 @@ class AmbientRuntime:
             self._on_resize,
             add="+",
         )
+        self.root.bind(
+            "<Destroy>",
+            self._on_destroy,
+            add="+",
+        )
 
     def start(self) -> None:
         self.build()
@@ -73,6 +87,19 @@ class AmbientRuntime:
 
     def _on_resize(self, _event) -> None:
         self.render()
+
+    def _on_destroy(self, event) -> None:
+        if event.widget is not self.root:
+            return
+
+        if self._after is not None:
+            try:
+                self.root.after_cancel(self._after)
+            except tk.TclError:
+                pass
+            self._after = None
+
+        self.ambient.stop()
 
     def _animate(self) -> None:
         self._after = None
@@ -121,7 +148,7 @@ class AmbientRuntime:
             for index in range(9, 0, -1):
                 ratio = index / 9
                 r = radius * ratio
-                opacity = pulse * (1.0 - ratio) * 0.55
+                opacity = pulse * (1.0 - ratio) * 1.35
 
                 fill = _blend_hex(
                     self.theme_state.palette.background,

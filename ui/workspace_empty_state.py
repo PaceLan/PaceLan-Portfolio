@@ -46,10 +46,6 @@ class WorkspaceEmptyState(tk.Canvas):
         self._ambient_started = time.monotonic()
         self._ambient_after = None
         self._caption_item = None
-        self._pointer_items: tuple[int, ...] | None = None
-        self._pointer_x = 0
-        self._pointer_y = 0
-        self._pointer_intensity = 0.0
         self.bind("<Configure>", self._draw)
         self.bind("<Destroy>", self._on_destroy, add="+")
         self._draw()
@@ -96,14 +92,6 @@ class WorkspaceEmptyState(tk.Canvas):
             self._ambient_started = time.monotonic()
             self._schedule_ambient()
 
-    def set_pointer_visual(self, x: int, y: int, intensity: float) -> None:
-        self._pointer_x = x
-        self._pointer_y = y
-        self._pointer_intensity = min(max(intensity, 0.0), 0.22)
-        if self._pointer_items is None:
-            self._draw()
-            return
-        self._update_pointer_items()
 
     def _draw(self, _event=None) -> None:
         width = self.winfo_width()
@@ -113,7 +101,6 @@ class WorkspaceEmptyState(tk.Canvas):
 
         self.delete("all")
         self._caption_item = None
-        self._pointer_items = None
         band_count = min(max(height // 8, 20), 72)
         for index in range(band_count):
             top = index / band_count
@@ -127,8 +114,6 @@ class WorkspaceEmptyState(tk.Canvas):
                 fill=color,
                 outline=color,
             )
-
-        self._create_pointer_items()
 
         self.create_line(
             width * 0.12,
@@ -176,67 +161,6 @@ class WorkspaceEmptyState(tk.Canvas):
             self.bottom_color,
             (position - 0.5) * 2,
         )
-
-    def _create_pointer_items(self) -> None:
-        width = self.winfo_width()
-        height = self.winfo_height()
-        radius_x = max(50, min(width * 0.24, 240))
-        radius_y = max(45, min(height * 0.30, 180))
-        background = self._background_color(
-            self._pointer_y / max(height, 1)
-        )
-        ratios = (0.18, 0.11, 0.06)
-        self._pointer_items = tuple(
-            self.create_oval(
-                0,
-                0,
-                0,
-                0,
-                fill=_mix_color(
-                    background,
-                    self.accent_color,
-                    self._pointer_intensity * ratio,
-                ),
-                outline="",
-                state=tk.HIDDEN,
-                stipple=stipple,
-            )
-            for ratio, stipple in zip(ratios, ("gray12", "gray25", "gray50"))
-        )
-        self._update_pointer_items()
-
-    def _update_pointer_items(self) -> None:
-        if self._pointer_items is None:
-            return
-        width = self.winfo_width()
-        height = self.winfo_height()
-        radius_x = max(50, min(width * 0.24, 240))
-        radius_y = max(45, min(height * 0.30, 180))
-        position = self._pointer_y / max(height, 1)
-        background = self._background_color(position)
-        for index, ratio in enumerate((0.18, 0.11, 0.06)):
-            item = self._pointer_items[index]
-            self.coords(
-                item,
-                self._pointer_x - radius_x,
-                self._pointer_y - radius_y,
-                self._pointer_x + radius_x,
-                self._pointer_y + radius_y,
-            )
-            color = _mix_color(
-                background,
-                self.accent_color,
-                self._pointer_intensity * ratio,
-            )
-            self.itemconfigure(
-                item,
-                fill=color,
-                state=(
-                    tk.NORMAL
-                    if self._pointer_intensity > 0.01
-                    else tk.HIDDEN
-                ),
-            )
 
     def _schedule_ambient(self) -> None:
         if (

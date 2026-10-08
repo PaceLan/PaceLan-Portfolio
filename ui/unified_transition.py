@@ -1,4 +1,4 @@
-﻿"""Unified product-level visual transition coordination for M26.7."""
+"""Unified product-level visual transition coordination for PacePilot."""
 
 from __future__ import annotations
 
@@ -10,28 +10,32 @@ from .panel_transitions import (
     PanelTransitionController,
     TransitionDirection,
     TransitionPhase,
+    TransitionPrimitive,
 )
 
 
 class UnifiedTransitionKind(str, Enum):
-    """Product-level visual transition contexts."""
+    """Product-level transition contexts."""
 
     OPENING = "opening"
     LOADING = "loading"
     GREETING = "greeting"
     WORKSPACE = "workspace"
+    AGENT = "agent"
+    RESULT = "result"
     THEME = "theme"
 
 
 @dataclass(frozen=True)
 class UnifiedTransition:
-    """Immutable description of a product-level transition."""
+    """Immutable product-level transition snapshot."""
 
     kind: UnifiedTransitionKind
     source: str | None
     target: str
     duration_ms: int
     phase: TransitionPhase
+    primitive: TransitionPrimitive
 
     @property
     def active(self) -> bool:
@@ -42,7 +46,7 @@ class UnifiedTransition:
 
 
 class UnifiedTransitionController:
-    """Coordinate product-level transitions through the existing panel engine."""
+    """Single product-level entry point for visual transitions."""
 
     def __init__(self, duration_ms: int = 180) -> None:
         if duration_ms < 0:
@@ -69,47 +73,82 @@ class UnifiedTransitionController:
         target: str,
         *,
         direction: TransitionDirection = TransitionDirection.NONE,
+        primitive: TransitionPrimitive = TransitionPrimitive.CROSS_FADE,
     ) -> UnifiedTransition:
         if not target:
             raise ValueError("target must not be empty")
 
-        transition = self._panel.start(target, direction=direction)
+        transition = self._panel.start(
+            target,
+            direction=direction,
+            primitive=primitive,
+        )
         self._current_kind = kind
+        return self._snapshot(transition)
 
-        return UnifiedTransition(
-            kind=kind,
-            source=transition.source,
-            target=target,
-            duration_ms=transition.duration_ms,
-            phase=transition.phase,
+    def cross_fade(
+        self,
+        kind: UnifiedTransitionKind,
+        target: str,
+        *,
+        direction: TransitionDirection = TransitionDirection.NONE,
+    ) -> UnifiedTransition:
+        return self.start(
+            kind,
+            target,
+            direction=direction,
+            primitive=TransitionPrimitive.CROSS_FADE,
+        )
+
+    def ambient_shift(
+        self,
+        kind: UnifiedTransitionKind,
+        target: str,
+        *,
+        direction: TransitionDirection = TransitionDirection.NONE,
+    ) -> UnifiedTransition:
+        return self.start(
+            kind,
+            target,
+            direction=direction,
+            primitive=TransitionPrimitive.AMBIENT_SHIFT,
+        )
+
+    def focus_depth(
+        self,
+        kind: UnifiedTransitionKind,
+        target: str,
+        *,
+        direction: TransitionDirection = TransitionDirection.NONE,
+    ) -> UnifiedTransition:
+        return self.start(
+            kind,
+            target,
+            direction=direction,
+            primitive=TransitionPrimitive.FOCUS_DEPTH,
         )
 
     def enter(self) -> UnifiedTransition:
-        transition = self._panel.enter()
-        return self._snapshot(transition)
+        return self._snapshot(self._panel.enter())
 
     def complete(self) -> UnifiedTransition:
-        transition = self._panel.complete()
-        return self._snapshot(transition)
+        return self._snapshot(self._panel.complete())
 
-    def reset(self) -> UnifiedTransition | None:
+    def reset(self) -> None:
         self._panel.reset()
         self._current_kind = None
-        return None
 
     def _snapshot(self, transition: PanelTransition) -> UnifiedTransition:
         if self._current_kind is None:
-            raise RuntimeError("no unified transition has been started")
-
-        if transition.target is None:
-            raise RuntimeError("unified transition has no target")
+            raise RuntimeError("unified transition has no active kind")
 
         return UnifiedTransition(
             kind=self._current_kind,
             source=transition.source,
-            target=transition.target,
+            target=transition.target or "",
             duration_ms=transition.duration_ms,
             phase=transition.phase,
+            primitive=transition.primitive,
         )
 
 

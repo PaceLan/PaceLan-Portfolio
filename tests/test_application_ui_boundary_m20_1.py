@@ -24,7 +24,7 @@ class M201ApplicationUiBoundaryTests(unittest.TestCase):
 
         context = controller.open_project("C:/Demo")
 
-        workspace.open_project.assert_called_once_with("C:/Demo")
+        workspace.open_project.assert_called_once_with(Path("C:/Demo"))
         self.assertEqual(context.name, "Demo")
 
     def test_controller_tree_delegates_to_application_boundary(self):

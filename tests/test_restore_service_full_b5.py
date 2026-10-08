@@ -46,7 +46,9 @@ class TestRestoreServiceFullB5(unittest.TestCase):
                 status="completed",
             )
             snapshot = SnapshotModel(
+                run_id="run-1",
                 task_id="t1",
+                run_status="COMPLETED",
             )
             workflow = ApplicationExecutionModel(
                 task=task,

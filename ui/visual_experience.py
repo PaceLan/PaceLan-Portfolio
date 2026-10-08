@@ -10,8 +10,10 @@ from ui.daily_greeting import DailyGreetingService, greeting_history_path
 from ui.unified_transition import (
     UnifiedTransitionController,
     UnifiedTransitionKind,
+    UnifiedTransition,
 )
 from ui.theme import ThemeState
+from ui.transition_runtime import TransitionRuntime
 
 
 @dataclass
@@ -49,6 +51,11 @@ class VisualExperienceController:
             composition=composition,
         )
         self.transition_controller = UnifiedTransitionController()
+        self.transition_runtime = TransitionRuntime(
+            root,
+            on_frame=self._render_transition_frame,
+            on_complete=self._finish_transition_runtime,
+        )
         self._theme_surfaces = []
 
         self.greeting_service = None
@@ -84,6 +91,9 @@ class VisualExperienceController:
         self.transition_controller.complete()
         return self.theme_state
 
+    def register_ambient_surface(self, widget) -> None:
+        self.ambient_runtime.register_surface(widget)
+
     def start_ambient(self):
         self.ambient_runtime.start()
         return self.ambient
@@ -91,16 +101,68 @@ class VisualExperienceController:
     def stop_ambient(self):
         self.ambient_runtime.stop()
 
+    def _render_transition_frame(self, primitive, progress: float) -> None:
+        if self.visual_renderer is None:
+            return
+
+        intensity = 0.08 * (1.0 - progress)
+        if primitive.value == "ambient_shift":
+            intensity = 0.18 * (1.0 - progress)
+        elif primitive.value == "focus_depth":
+            intensity = 0.12 * (1.0 - progress)
+
+        self.visual_renderer.apply_ambient_field(intensity)
+
+    def _finish_transition_runtime(self) -> None:
+        self.transition_controller.complete()
+
+    def _start_transition_runtime(self) -> None:
+        transition = self.transition_controller.panel_transition
+        self.transition_runtime.start(transition.primitive)
+
     def start_transition(
         self,
         kind: UnifiedTransitionKind,
         target: str,
     ):
-        self.transition_controller.start(kind, target)
+        self.transition_controller.cross_fade(kind, target)
         self.transition_controller.enter()
+        self._start_transition_runtime()
         return self.transition_controller.current_kind
 
+    def cross_fade(
+        self,
+        kind: UnifiedTransitionKind,
+        target: str,
+    ) -> UnifiedTransition:
+        transition = self.transition_controller.cross_fade(kind, target)
+        self.transition_controller.enter()
+        self._start_transition_runtime()
+        return transition
+
+    def ambient_shift(
+        self,
+        kind: UnifiedTransitionKind,
+        target: str,
+    ) -> UnifiedTransition:
+        transition = self.transition_controller.ambient_shift(kind, target)
+        self.transition_controller.enter()
+        self._start_transition_runtime()
+        return transition
+
+    def focus_depth(
+        self,
+        kind: UnifiedTransitionKind,
+        target: str,
+    ) -> UnifiedTransition:
+        transition = self.transition_controller.focus_depth(kind, target)
+        self.transition_controller.enter()
+        self._start_transition_runtime()
+        return transition
+
     def complete_transition(self):
+        if self.transition_runtime.running:
+            return self.transition_controller.panel_transition
         return self.transition_controller.complete()
 
     def resolve_greeting(self) -> Optional[str]:

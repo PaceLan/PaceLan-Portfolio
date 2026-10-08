@@ -57,6 +57,7 @@ class StartupCoordinator:
         self.app = CodingAssistantApp(
             self.root,
             agent_service=self.runtime.agent_service,
+            execution_service=self.runtime.execution_service,
             runtime_root=self.runtime_root,
         )
 

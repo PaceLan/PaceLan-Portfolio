@@ -38,14 +38,24 @@ class OpeningExperience:
         self._started_at = 0
         self._after_id = None
 
-        self._overlay = tk.Frame(root, bd=0, highlightthickness=0)
+        palette = self.theme_state.palette
+        self._overlay = tk.Frame(
+            root,
+            bd=0,
+            highlightthickness=0,
+            background=palette.background,
+        )
         self._canvas = tk.Canvas(
             self._overlay,
             bd=0,
             highlightthickness=0,
         )
         self._canvas.pack(fill="both", expand=True)
-        self._canvas.bind("<Configure>", self._render)
+        self._canvas.bind("<Configure>", self._on_configure)
+        self._overlay.bind("<Destroy>", self._on_destroy, add="+")
+
+    def _on_configure(self, _event=None) -> None:
+        self._render()
 
     def set_greeting(self, greeting: str | None) -> None:
         self.config = OpeningConfig(
@@ -102,7 +112,8 @@ class OpeningExperience:
         height = max(self._canvas.winfo_height(), 1)
 
         try:
-            layers = self.ambient.snapshot(elapsed / 1000.0).layers
+            phase = (elapsed / 1000.0) % 1.0
+            layers = self.ambient.snapshot(phase).layers
         except AttributeError:
             layers = ()
 
@@ -197,6 +208,17 @@ class OpeningExperience:
             for index in (1, 3, 5)
         ]
         return "#" + "".join(f"{channel:02X}" for channel in channels)
+
+    def _on_destroy(self, event=None) -> None:
+        if event is not None and event.widget is not self._overlay:
+            return
+
+        if self._after_id is not None:
+            try:
+                self.root.after_cancel(self._after_id)
+            except tk.TclError:
+                pass
+            self._after_id = None
 
     def complete(self, on_complete=None) -> None:
         if self.completed:

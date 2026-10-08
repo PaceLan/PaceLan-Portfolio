@@ -53,6 +53,7 @@ class ApplicationController:
         file_reader: Optional[FileReaderProvider] = None,
         workspace: Optional[ProjectWorkspaceService] = None,
         agent_service=None,
+        execution_service=None,
     ) -> None:
         base_workspace = workspace or ProjectWorkspaceService(
             project_manager=project_manager,
@@ -66,9 +67,13 @@ class ApplicationController:
         self._project_context = ProjectContext(None, None, False, False)
         self.agent_service = agent_service
         self.application_execution_service = (
-            ApplicationExecutionService(agent_service)
-            if agent_service is not None
-            else None
+            execution_service
+            if execution_service is not None
+            else (
+                ApplicationExecutionService(agent_service)
+                if agent_service is not None
+                else None
+            )
         )
         self.agent_state = AgentInteractionState()
         self._agent_history = ()

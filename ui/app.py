@@ -16,7 +16,6 @@ from ui.visual_layout import WorkspaceLayout
 from ui.visual_renderer import VisualRenderer
 from ui.visual_experience import VisualExperienceController
 from ui.visual_icons import VisualIconSet
-from ui.pointer_visuals import PointerVisualLayer
 from ui.workspace_empty_state import WorkspaceEmptyState
 from ui.workspace_state import (
     SelectedFile,
@@ -46,12 +45,14 @@ class CodingAssistantApp:
         layout: Optional[WorkspaceLayout] = None,
         composition: Optional[UXComposition] = None,
         agent_service=None,
+        execution_service=None,
         runtime_root: Optional[Union[str, Path]] = None,
         accessibility: Optional[AnimationAccessibility] = None,
     ) -> None:
         self.root = root
         self.controller = controller or ApplicationController(
             agent_service=agent_service,
+            execution_service=execution_service,
         )
         self.composition = composition or DEFAULT_UX_COMPOSITION
         self.accessibility = accessibility or AnimationAccessibility()
@@ -69,7 +70,6 @@ class CodingAssistantApp:
         self._tree_paths: dict[str, tuple[str, bool]] = {}
         self.workspace_state = self.controller.initial_state()
         self._build_layout()
-
         self.visual_experience.register_theme_surface(self.icons)
         self.visual_experience.register_theme_surface(self.empty_state)
         self.visual_experience.register_theme_surface(self.agent_panel.visual_system)
@@ -81,9 +81,7 @@ class CodingAssistantApp:
             self.workspace_panel,
             self.agent_panel,
         ):
-            self.visual_renderer.register_ambient_surface(surface)
-
-        self._build_pointer_layer()
+            self.visual_experience.register_ambient_surface(surface)
 
         if project_root is not None:
             self.controller.open_project(project_root)
@@ -167,61 +165,6 @@ class CodingAssistantApp:
     def _toggle_theme(self) -> None:
         self.visual_experience.toggle_theme()
 
-    def _build_pointer_layer(self) -> None:
-        self.pointer_layer = PointerVisualLayer(
-            self.root,
-            accessibility=self.accessibility,
-        )
-        renderer = self.visual_renderer
-        for surface in (
-            self.header_frame,
-            self.project_panel,
-            self.workspace_panel,
-            self.agent_panel,
-            self.open_project_button,
-        ):
-            self.pointer_layer.register(
-                surface,
-                lambda _x, _y, amount, target=surface:
-                renderer.apply_pointer_surface(target, amount),
-            )
-        self.pointer_layer.register(
-            self.empty_state,
-            self.empty_state.set_pointer_visual,
-        )
-        self.pointer_layer.register(
-            self.file_viewer,
-            lambda _x, _y, amount:
-            renderer.apply_pointer_text(self.file_viewer, amount),
-        )
-        self.pointer_layer.register(
-            self.tree_view,
-            self._set_project_tree_pointer,
-        )
-        for stage, frame in self.agent_panel._stage_frames.items():
-            self.pointer_layer.register(
-                frame,
-                lambda _x, _y, amount, target_stage=stage:
-                self.agent_panel.visual_system.set_pointer(
-                    target_stage, amount,
-                ),
-            )
-
-    def _set_project_tree_pointer(self, _x: int, y: int, intensity: float) -> None:
-        row = self.tree_view.identify_row(y) if intensity > 0.01 else ""
-        previous = getattr(self, "_pointer_tree_item", None)
-        if previous and previous != row:
-            tags = tuple(
-                tag for tag in self.tree_view.item(previous, "tags")
-                if tag != "pointer-hover"
-            )
-            self.tree_view.item(previous, tags=tags)
-        self._pointer_tree_item = row or None
-        if row:
-            tags = tuple(self.tree_view.item(row, "tags"))
-            if "pointer-hover" not in tags:
-                self.tree_view.item(row, tags=tags + ("pointer-hover",))
-
     def _build_navigation(self, parent: ttk.Panedwindow) -> ttk.LabelFrame:
         navigation = ttk.LabelFrame(parent, text="", padding=8)
         self.project_heading = ttk.Label(
@@ -237,11 +180,6 @@ class CodingAssistantApp:
         self.visual_renderer.apply_navigation(navigation)
 
         self.tree_view = ttk.Treeview(navigation, show="tree")
-        self.tree_view.tag_configure(
-            "pointer-hover",
-            background=self.theme_state.palette.surface_elevated,
-            foreground=self.theme_state.palette.text,
-        )
         self.tree_view.grid(row=0, column=0, sticky="nsew")
         self.tree_view.bind("<<TreeviewSelect>>", self._on_tree_selection)
         self.visual_renderer.apply_tree(self.tree_view)
@@ -309,8 +247,8 @@ class CodingAssistantApp:
         return self.agent_panel
 
     def _render_agent_state(self, state: AgentInteractionState) -> AgentInteractionState:
-        self.visual_experience.start_transition(
-            UnifiedTransitionKind.GREETING,
+        self.visual_experience.focus_depth(
+            UnifiedTransitionKind.AGENT,
             "agent",
         )
 
@@ -427,6 +365,10 @@ class CodingAssistantApp:
 
         result = self.controller.select_file(relative_path)
         if result.success:
+            self.visual_experience.ambient_shift(
+                UnifiedTransitionKind.WORKSPACE,
+                relative_path,
+            )
             self.workspace_state = WorkspaceState(
                 project=self.workspace_state.project,
                 tree=TreeState(
@@ -516,12 +458,14 @@ def create_app(
     project_root: Optional[Union[str, Path]] = None,
     controller: Optional[ApplicationController] = None,
     agent_service=None,
+    execution_service=None,
 ) -> CodingAssistantApp:
     return CodingAssistantApp(
         root,
         controller=controller,
         project_root=project_root,
         agent_service=agent_service,
+        execution_service=execution_service,
     )
 
 

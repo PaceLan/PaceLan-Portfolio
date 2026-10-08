@@ -198,6 +198,19 @@ class AgentVisualSystem:
         return str(value).strip().replace(" ", "_").upper()
 
 
+
+def _mix_color(start: str, end: str, ratio: float) -> str:
+    ratio = max(0.0, min(ratio, 1.0))
+    channels = [
+        round(
+            int(start[index:index + 2], 16) * (1 - ratio)
+            + int(end[index:index + 2], 16) * ratio
+        )
+        for index in (1, 3, 5)
+    ]
+    return "#" + "".join(f"{channel:02X}" for channel in channels)
+
+
 class _ColorFade:
     def __init__(self, widget, set_color, initial_color: str) -> None:
         self.widget = widget
@@ -284,7 +297,6 @@ class _StageOutline:
         self.spec = AnimationSpec()
         self._after_id = None
         self._started = 0.0
-        self._pointer_intensity = 0.0
 
     def apply_theme(self, palette) -> None:
         background = palette.surface_elevated
@@ -304,10 +316,6 @@ class _StageOutline:
         self._theme_border = palette.border
         self._draw()
 
-    def set_pointer(self, intensity: float) -> None:
-        self._pointer_intensity = min(max(intensity, 0.0), 0.22)
-        if self.effect not in {StageEffect.RUNNING, StageEffect.WAITING}:
-            self._draw()
 
     def set_effect(self, effect: StageEffect, spec: AnimationSpec) -> None:
         if effect is self.effect:
@@ -346,28 +354,12 @@ class _StageOutline:
         height = self.canvas.winfo_height()
         if width < 8 or height < 8:
             return
-        if (
-            self.effect is StageEffect.REST
-            and self._pointer_intensity <= 0.01
-        ):
-            return
 
         bounds = (1.5, 1.5, width - 1.5, height - 1.5)
         base = self._theme_border
         self.canvas.create_rectangle(*bounds, outline=base, width=1)
 
-        if self.effect is StageEffect.REST:
-            pointer_color = _mix_color(
-                base,
-                self._colors["blue"],
-                self._pointer_intensity * 0.55,
-            )
-            self.canvas.create_rectangle(
-                *bounds,
-                outline=pointer_color,
-                width=1,
-            )
-        elif self.effect is StageEffect.IDLE:
+        if self.effect is StageEffect.IDLE:
             phase = (time.monotonic() - self._started) / 18.0
             breath = (1 - cos(2 * pi * phase)) / 2
             color = _mix_color(
@@ -633,30 +625,3 @@ class AgentPanelVisualSystem:
 
         self.previous = target
         return transition
-
-    def set_pointer(self, stage: AgentStage, intensity: float) -> None:
-        outline = self.outlines.get(stage)
-        if outline is not None:
-            outline.set_pointer(intensity)
-
-
-def _mix_color(start: str, end: str, ratio: float) -> str:
-    ratio = min(max(ratio, 0.0), 1.0)
-    channels = tuple(
-        round(
-            int(start[index:index + 2], 16) * (1 - ratio)
-            + int(end[index:index + 2], 16) * ratio
-        )
-        for index in (1, 3, 5)
-    )
-    return "#" + "".join(f"{channel:02X}" for channel in channels)
-
-
-__all__ = [
-    "AgentPanelVisualSystem",
-    "AgentStage",
-    "AgentVisualProjection",
-    "AgentVisualSystem",
-    "AgentVisualTransition",
-    "StageEffect",
-]

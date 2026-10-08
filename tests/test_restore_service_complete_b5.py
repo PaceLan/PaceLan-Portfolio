@@ -2,7 +2,13 @@
 import unittest
 from pathlib import Path
 
+from agent_workflow.dependency_graph import DependencyGraph
+from agent_workflow.file_index import FileIndex
 from agent_workflow.project_context import ProjectContext
+from agent_workflow.project_scanner import (
+    ProjectScanResult,
+    ProjectScanStatistics,
+)
 
 from application.context_persistence import ContextPersistenceService
 from application.history import AgentHistoryEntry, AgentHistoryStatus
@@ -52,7 +58,9 @@ class TestRestoreServiceCompleteB5(unittest.TestCase):
                 completed_successfully=True,
             )
             snapshot = SnapshotModel(
+                run_id="run-b5",
                 task_id="t-b5",
+                run_status="COMPLETED",
             )
             workflow = ApplicationExecutionModel(
                 task=task,
@@ -64,13 +72,41 @@ class TestRestoreServiceCompleteB5(unittest.TestCase):
             WorkflowStorage().save(workflow, root)
 
             history_entry = AgentHistoryEntry(
+                history_id="h-b5",
+                project_id="p-b5",
                 task_id="t-b5",
-                status=AgentHistoryStatus.COMPLETED,
+                execution_id="r-b5",
+                verification_status="VERIFIED",
+                result_status=AgentHistoryStatus.COMPLETED,
+                timestamp="2026-01-01T00:00:00+00:00",
             )
             AgentHistoryStorage().save((history_entry,), root)
 
+            resolved_root = root.resolve()
             context = ProjectContext(
-                root_path=root.resolve(),
+                root_path=resolved_root,
+                scan_result=ProjectScanResult(
+                    root_path=resolved_root,
+                    files=(),
+                    directories=(),
+                    statistics=ProjectScanStatistics(
+                        file_count=0,
+                        directory_count=0,
+                        total_size=0,
+                        ignored_count=0,
+                    ),
+                    errors=(),
+                ),
+                file_index=FileIndex(
+                    root_path=resolved_root,
+                    entries=(),
+                ),
+                python_asts=(),
+                python_relationships=(),
+                dependency_graph=DependencyGraph(
+                    nodes=(),
+                    edges=(),
+                ),
             )
             ContextPersistenceService().save(context, root)
 

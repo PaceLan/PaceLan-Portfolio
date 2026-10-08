@@ -91,9 +91,9 @@ class M267AppTransitionWiringTests(unittest.TestCase):
             "enter",
             wraps=transition.enter,
         ) as enter, patch.object(
-            transition,
-            "complete",
-            wraps=transition.complete,
+            app.visual_experience,
+            "complete_transition",
+            wraps=app.visual_experience.complete_transition,
         ) as complete:
             app._choose_project()
 
@@ -136,9 +136,9 @@ class M267AppTransitionWiringTests(unittest.TestCase):
             "enter",
             wraps=transition.enter,
         ) as enter, patch.object(
-            transition,
-            "complete",
-            wraps=transition.complete,
+            app.visual_experience,
+            "complete_transition",
+            wraps=app.visual_experience.complete_transition,
         ) as complete:
             result = app._render_agent_state(state)
 

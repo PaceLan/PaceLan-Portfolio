@@ -143,6 +143,8 @@ class TestTaskManagementA4(unittest.TestCase):
             self.assertEqual(tuple(t.task_id for t in workspace.tasks), (
                 "workspace-task",
             ))
+            workspace.update_project_goal("Build PacePilot task execution")
+            workspace.confirm_project_goal()
             self.assertEqual(
                 workspace.submit_task("workspace-task").status,
                 TaskStatus.SUBMITTED,

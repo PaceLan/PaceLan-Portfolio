@@ -27,7 +27,6 @@ class VisualRenderer:
             "accent_purple",
             self.colors.get("agent_running", self.accent_blue),
         )
-        self._pointer_widget_styles: dict[str, tuple[object, str, str]] = {}
         self._pointer_text_colors: dict[str, tuple[object, str]] = {}
         self._ambient_surfaces: dict[str, tuple[object, str]] = {}
 
@@ -403,57 +402,6 @@ class VisualRenderer:
             activestyle="none",
         )
 
-    def apply_pointer_surface(self, widget, intensity: float) -> None:
-        key = str(widget)
-        intensity = min(max(intensity, 0.0), 0.3)
-        pointer_state = self._pointer_widget_styles.get(key)
-        if pointer_state is None:
-            original_style = widget.cget("style") or widget.winfo_class()
-            style_name = f"PacePilot.Pointer{id(widget)}.{widget.winfo_class()}"
-            pointer_state = (widget, original_style, style_name)
-            self._pointer_widget_styles[key] = pointer_state
-        widget, original_style, style_name = pointer_state
-        base_color = (
-            self.tokens.colors["surface_elevated"]
-            if "TLabelframe" in original_style or "Primary" in original_style
-            else self.tokens.colors["background"]
-            if original_style == "PacePilot.TFrame"
-            else self.tokens.colors["surface"]
-        )
-        if intensity <= 0.01:
-            try:
-                widget.configure(style=original_style)
-            except tk.TclError:
-                pass
-            return
-
-        background = _mix_color(
-            base_color,
-            self.accent_blue,
-            intensity * 0.22,
-        )
-        border = _mix_color(
-            self.tokens.colors["border"],
-            self.accent_blue,
-            intensity * 0.40,
-        )
-        self.style.configure(
-            style_name,
-            background=background,
-            bordercolor=border,
-            lightcolor=border,
-            darkcolor=border,
-            foreground=self.style.lookup(original_style, "foreground")
-            or self.tokens.colors["text"],
-            padding=self.style.lookup(original_style, "padding") or 0,
-        )
-        if widget.winfo_class() == "TLabelframe":
-            self.style.configure(
-                f"{style_name}.Label",
-                background=background,
-                foreground=self.tokens.colors["text"],
-            )
-        widget.configure(style=style_name)
 
     def apply_pointer_text(self, widget: tk.Text, intensity: float) -> None:
         key = str(widget)

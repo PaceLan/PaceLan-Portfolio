@@ -7,3 +7,13 @@ venv/
 build/
 dist/
 release/*.exe
+
+vscode-extension/**/node_modules/
+vscode-extension/**/.vscode-test/
+
+# Local VS Code test/runtime data
+.c2_2_vscode_data/
+.c2_2_vscode_data2/
+.c2_2_vscode_data3/
+node_modules/
+.vscode/

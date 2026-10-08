@@ -14,7 +14,9 @@ from ui.opening_experience import OpeningConfig
 
 def resolve_daily_greeting(runtime_root):
     greeting_service = DailyGreetingService(
-        greeting_history_path(runtime_root)
+        history_path=greeting_history_path(
+            base_directory=runtime_root
+        )
     )
     daily_greeting = greeting_service.today_text()
     # M26.5 opening contract: config=OpeningConfig(greeting=daily_greeting)
@@ -57,6 +59,11 @@ def create_app(
         project_root=project_root,
         controller=controller,
         agent_service=resolved_agent_service,
+        execution_service=(
+            runtime.execution_service
+            if runtime is not None
+            else None
+        ),
     )
 
 

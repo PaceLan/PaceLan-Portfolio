@@ -34,32 +34,37 @@ class TestM23_1ProductShellEntry(unittest.TestCase):
             project_root=Path("project"),
             controller=controller,
             agent_service=agent_service,
+            execution_service=None,
         )
 
     def test_create_app_signature_preserves_shell_dependencies(self):
         self.assertIn("root", app_entry.create_app.__annotations__)
         self.assertIn("project_root", app_entry.create_app.__annotations__)
 
-    def test_main_creates_root_and_starts_mainloop(self):
+    def test_main_starts_startup_coordinator_and_mainloop(self):
         root = MagicMock()
-        app_instance = MagicMock()
-        runtime = MagicMock()
-        runtime.agent_service = MagicMock()
+        coordinator = MagicMock()
 
         with patch.object(app_entry.tk, "Tk", return_value=root) as tk_factory, \
-             patch.object(app_entry, "create_runtime", return_value=runtime) as runtime_factory, \
-             patch.object(app_entry, "create_app", return_value=app_instance) as create_factory:
+             patch.object(
+                 app_entry,
+                 "StartupCoordinator",
+                 return_value=coordinator,
+             ) as coordinator_factory:
             app_entry.main()
 
         tk_factory.assert_called_once_with()
-        runtime_factory.assert_called_once()
-        runtime_root = Path(runtime_factory.call_args.args[0])
+        coordinator_factory.assert_called_once()
+
+        args, kwargs = coordinator_factory.call_args
+        self.assertEqual(args[0], root)
+
+        runtime_root = Path(kwargs["runtime_root"])
         self.assertEqual(runtime_root.name, "runtime")
         self.assertEqual(runtime_root.parent.name, "PacePilot")
-        create_factory.assert_called_once_with(
-            root,
-            agent_service=runtime.agent_service,
-        )
+        self.assertEqual(kwargs["greeting_resolver"], app_entry.resolve_daily_greeting)
+
+        coordinator.start.assert_called_once_with()
         root.mainloop.assert_called_once_with()
 
 

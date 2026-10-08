@@ -35,7 +35,7 @@ class UiControllerTests(unittest.TestCase):
 
         context = controller.open_project("C:/Demo")
 
-        project_manager.open_project.assert_called_once_with("C:/Demo")
+        project_manager.open_project.assert_called_once_with(Path("C:/Demo"))
         project_manager.get_project_info.assert_called_once_with()
         self.assertEqual(context.name, "Demo")
         self.assertTrue(context.is_directory)

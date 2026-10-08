@@ -1,4 +1,4 @@
-﻿"""Page and panel transition contracts for the M22 visual interaction layer."""
+"""Deterministic page and panel transition primitives for PacePilot."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Optional
 
 
 class TransitionPhase(str, Enum):
-    """Lifecycle phases for a page/panel transition."""
+    """Lifecycle phase of a transition."""
 
     IDLE = "idle"
     EXITING = "exiting"
@@ -17,20 +17,29 @@ class TransitionPhase(str, Enum):
 
 
 class TransitionDirection(str, Enum):
-    """Logical direction of a panel/page transition."""
+    """Logical navigation direction."""
 
     NONE = "none"
     FORWARD = "forward"
     BACKWARD = "backward"
 
 
+class TransitionPrimitive(str, Enum):
+    """Visual primitive used to communicate a transition."""
+
+    CROSS_FADE = "cross_fade"
+    AMBIENT_SHIFT = "ambient_shift"
+    FOCUS_DEPTH = "focus_depth"
+
+
 @dataclass(frozen=True)
 class PanelTransition:
-    """Immutable description of one page/panel transition."""
+    """Immutable description of one panel transition."""
 
     source: Optional[str] = None
     target: Optional[str] = None
     direction: TransitionDirection = TransitionDirection.NONE
+    primitive: TransitionPrimitive = TransitionPrimitive.CROSS_FADE
     duration_ms: int = 180
     phase: TransitionPhase = TransitionPhase.IDLE
 
@@ -40,7 +49,6 @@ class PanelTransition:
 
     @property
     def active(self) -> bool:
-        """Return whether the transition is currently active."""
         return self.phase in (
             TransitionPhase.EXITING,
             TransitionPhase.ENTERING,
@@ -48,7 +56,7 @@ class PanelTransition:
 
 
 class PanelTransitionController:
-    """Small deterministic state machine for page/panel transitions."""
+    """Small deterministic state machine for visual transitions."""
 
     def __init__(self, duration_ms: int = 180) -> None:
         if duration_ms < 0:
@@ -71,8 +79,9 @@ class PanelTransitionController:
         target: str,
         *,
         direction: TransitionDirection = TransitionDirection.NONE,
+        primitive: TransitionPrimitive = TransitionPrimitive.CROSS_FADE,
     ) -> PanelTransition:
-        """Start a deterministic transition toward ``target``."""
+        """Start a transition toward target."""
         if not target:
             raise ValueError("target must not be empty")
 
@@ -83,21 +92,25 @@ class PanelTransitionController:
                 source=source,
                 target=target,
                 direction=direction,
+                primitive=primitive,
                 duration_ms=self._duration_ms,
                 phase=TransitionPhase.COMPLETE,
             )
             return self._transition
 
+        phase = (
+            TransitionPhase.EXITING
+            if source is not None
+            else TransitionPhase.ENTERING
+        )
+
         self._transition = PanelTransition(
             source=source,
             target=target,
             direction=direction,
+            primitive=primitive,
             duration_ms=self._duration_ms,
-            phase=(
-                TransitionPhase.EXITING
-                if source is not None
-                else TransitionPhase.ENTERING
-            ),
+            phase=phase,
         )
         return self._transition
 
@@ -110,13 +123,14 @@ class PanelTransitionController:
             source=self._transition.source,
             target=self._transition.target,
             direction=self._transition.direction,
+            primitive=self._transition.primitive,
             duration_ms=self._transition.duration_ms,
             phase=TransitionPhase.ENTERING,
         )
         return self._transition
 
     def complete(self) -> PanelTransition:
-        """Complete the current transition and commit its target panel."""
+        """Complete the transition and commit its target panel."""
         target = self._transition.target
 
         if target is not None:
@@ -126,16 +140,16 @@ class PanelTransitionController:
             source=self._transition.source,
             target=target,
             direction=self._transition.direction,
-            duration_ms=self._transition.duration_ms,
+            primitive=self._transition.primitive,
+            duration_ms=self._duration_ms,
             phase=TransitionPhase.COMPLETE,
         )
         return self._transition
 
     def reset(self) -> PanelTransition:
-        """Return the controller to an idle state."""
-        self._transition = PanelTransition(
-            duration_ms=self._duration_ms,
-        )
+        """Return the controller to its initial state."""
+        self._current_panel = None
+        self._transition = PanelTransition(duration_ms=self._duration_ms)
         return self._transition
 
 
@@ -144,4 +158,5 @@ __all__ = [
     "PanelTransitionController",
     "TransitionDirection",
     "TransitionPhase",
+    "TransitionPrimitive",
 ]

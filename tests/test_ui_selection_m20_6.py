@@ -18,6 +18,7 @@ class M206SelectionStateTests(unittest.TestCase):
     def _app_without_tk(self):
         app = CodingAssistantApp.__new__(CodingAssistantApp)
         app.controller = Mock(spec=ApplicationController)
+        app.visual_experience = Mock()
         app.workspace_state = WorkspaceState(
             project=ProjectContext(
                 "project",

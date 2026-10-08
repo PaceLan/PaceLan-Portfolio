@@ -1,0 +1,32 @@
+{
+  "name": "pacepilot-c2-2-host-test",
+  "displayName": "PacePilot C2.2 Host Test",
+  "version": "0.0.1",
+  "publisher": "pacepilot",
+  "description": "PacePilot C2.2 Extension Host verification",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:pacepilot.c2_2_test"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "pacepilot.c2_2_test",
+        "title": "PacePilot C2.2 Host Test"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@vscode/test-electron": "^3.1.0"
+  }
+}
