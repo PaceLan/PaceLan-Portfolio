@@ -6,6 +6,8 @@ from pathlib import Path
 from agent_workflow.project_context import ProjectContext
 
 from application.context_persistence import ContextPersistenceService
+from application.development_tree import DevelopmentTreeNode
+from application.development_tree_storage import DevelopmentTreeStorage
 from application.history import AgentHistoryEntry
 from application.history_storage import AgentHistoryStorage
 from application.models import ApplicationExecutionModel, ProjectModel
@@ -21,6 +23,7 @@ class ProjectRestoreState:
     workflow: ApplicationExecutionModel | None = None
     history: tuple[AgentHistoryEntry, ...] = ()
     context: ProjectContext | None = None
+    development_tree: tuple[DevelopmentTreeNode, ...] = ()
 
 
 class RestoreService:
@@ -32,12 +35,16 @@ class RestoreService:
         workflow_storage: WorkflowStorage | None = None,
         history_storage: AgentHistoryStorage | None = None,
         context_persistence: ContextPersistenceService | None = None,
+        development_tree_storage: DevelopmentTreeStorage | None = None,
     ) -> None:
         self._project_storage = project_storage or ProjectStorage()
         self._workflow_storage = workflow_storage or WorkflowStorage()
         self._history_storage = history_storage or AgentHistoryStorage()
         self._context_persistence = (
             context_persistence or ContextPersistenceService()
+        )
+        self._development_tree_storage = (
+            development_tree_storage or DevelopmentTreeStorage()
         )
 
     def restore(self, project_path: str | Path) -> ProjectRestoreState:
@@ -63,11 +70,14 @@ class RestoreService:
             else None
         )
 
+        development_tree = self._development_tree_storage.load(project_path)
+
         return ProjectRestoreState(
             project=project,
             workflow=workflow,
             history=history,
             context=context,
+            development_tree=development_tree,
         )
 
     def load_project(self, project_path: str | Path) -> ProjectModel:
@@ -88,6 +98,12 @@ class RestoreService:
     def load_context(self, project_path: str | Path) -> ProjectContext:
         return self._context_persistence.load(project_path)
 
+    def load_development_tree(
+        self,
+        project_path: str | Path,
+    ) -> tuple[DevelopmentTreeNode, ...]:
+        return self._development_tree_storage.load(project_path)
+
     def has_project(self, project_path: str | Path) -> bool:
         return self._project_storage.exists(project_path)
 
@@ -99,6 +115,9 @@ class RestoreService:
 
     def has_context(self, project_path: str | Path) -> bool:
         return self._context_persistence.exists(project_path)
+
+    def has_development_tree(self, project_path: str | Path) -> bool:
+        return bool(self._development_tree_storage.load(project_path))
 
 
 __all__ = ["ProjectRestoreState", "RestoreService"]
