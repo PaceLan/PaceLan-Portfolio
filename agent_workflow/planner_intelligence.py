@@ -105,7 +105,10 @@ class PlannerIntelligence:
             targets = cls._fallback_targets(task)
 
         if not targets:
-            targets = (".",)
+            raise ValueError(
+                "Cannot generate workflow plan: "
+                "no relevant or explicit file targets were found"
+            )
 
         intent = cls._planning_intent(task)
 
@@ -167,9 +170,14 @@ class PlannerIntelligence:
     ) -> WorkflowStep:
         """Build a non-executing deterministic workflow step."""
 
+        def unbound_action() -> str:
+            raise RuntimeError(
+                f"planned operation is not bound to an executor: {operation}"
+            )
+
         return WorkflowStep(
             operation=operation,
-            action=lambda: None,
+            action=unbound_action,
             target=target,
             context=PlannerIntelligence._context_text(
                 context,

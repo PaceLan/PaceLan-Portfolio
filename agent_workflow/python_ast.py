@@ -1,4 +1,4 @@
-"""Static Python source analysis using the standard-library AST module."""
+﻿"""Static Python source analysis using the standard-library AST module."""
 
 import ast
 from dataclasses import dataclass

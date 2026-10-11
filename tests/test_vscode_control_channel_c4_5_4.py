@@ -11,17 +11,19 @@ class VSCodeControlChannelC454Tests(unittest.TestCase):
 
         with patch("application.vscode_control_channel.urlopen") as opened:
             opened.return_value.__enter__.return_value.read.return_value = (
-                b'{"terminal_id":"t1","state":"RUNNING"}'
+                b'{"terminal_id":"t1","session_id":"s1","state":"RUNNING"}'
             )
 
-            result = channel.create("C:\\work")
+            result = channel.create("C:\\work", session_id="s1")
 
             request = opened.call_args.args[0]
             body = json.loads(request.data.decode("utf-8"))
 
         self.assertEqual(body["operation"], "create")
         self.assertEqual(body["cwd"], "C:\\work")
+        self.assertEqual(body["session_id"], "s1")
         self.assertEqual(result.terminal_id, "t1")
+        self.assertEqual(result.session_id, "s1")
         self.assertEqual(result.state, "RUNNING")
 
     def test_send_sends_command(self):
@@ -68,7 +70,9 @@ class VSCodeControlChannelC454Tests(unittest.TestCase):
                 b'{"terminal_id":"t1","state":"RUNNING"}'
             )
 
-            result = channel.status("t1")
+            result = channel.status(
+                "t1", session_id="s1", command_id="c1"
+            )
 
             body = json.loads(
                 opened.call_args.args[0].data.decode("utf-8")
@@ -76,6 +80,8 @@ class VSCodeControlChannelC454Tests(unittest.TestCase):
 
         self.assertEqual(body["operation"], "status")
         self.assertEqual(body["terminal_id"], "t1")
+        self.assertEqual(body["session_id"], "s1")
+        self.assertEqual(body["command_id"], "c1")
         self.assertEqual(result.state, "RUNNING")
 
 

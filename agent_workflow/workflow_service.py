@@ -44,10 +44,7 @@ class WorkflowService:
         if not isinstance(plan, WorkflowPlan):
             raise TypeError("plan must be a WorkflowPlan")
 
-        validated_plan = build_plan(
-            plan.task,
-            plan.steps,
-        )
+        validated_plan = build_plan(plan.task, plan.steps)
 
         readiness = ExecutionReadiness().check(validated_plan)
 
@@ -133,7 +130,7 @@ class WorkflowService:
                     result = WorkflowStepResult(
                         step.operation,
                         WorkflowStatus.FAILED,
-                        type(error).__name__,
+                        f"{type(error).__name__}: {error}",
                         False,
                     )
 

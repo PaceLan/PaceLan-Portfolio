@@ -114,7 +114,7 @@ class WorkflowOrchestrationFailureIsolationTests(unittest.TestCase):
         )
         self.assertEqual(
             result.step_results[1].result,
-            "RuntimeError",
+            "RuntimeError: orchestration failure",
         )
 
     def test_orchestration_exception_skips_remaining_steps(self) -> None:

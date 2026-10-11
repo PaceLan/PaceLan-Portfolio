@@ -11,6 +11,7 @@ from application.goal_confirmation_flow import GoalAnalysis, GoalConfirmationFlo
 from application.models import ProjectGoal, ProjectModel
 from application.project_metadata import ProjectMetadataService
 from application.project_storage import ProjectStorage
+from application.autonomous_task_creation import AutonomousTaskCreationService, AutonomousTaskRequest
 from application.task_management import (
     ProductTask,
     TaskManagementService,
@@ -55,6 +56,9 @@ class ProjectWorkspaceService:
         self._project_storage = ProjectStorage()
         self._goal_authority = GoalAuthority()
         self._goal_confirmation_flow = GoalConfirmationFlow()
+        self._autonomous_task_creation = AutonomousTaskCreationService(
+            self._goal_authority, self._task_service
+        )
 
     @property
     def project_path(self) -> Optional[Path]:
@@ -89,6 +93,24 @@ class ProjectWorkspaceService:
             title,
             description,
             task_id=task_id,
+        )
+
+    def create_task_from_goal(
+        self,
+        title: str,
+        description: str = "",
+    ) -> ProductTask:
+        if self._project_model is None:
+            raise ValueError(
+                "A valid project must be open before creating a task"
+            )
+
+        return self._autonomous_task_creation.create_from_goal(
+            AutonomousTaskRequest(
+                project_id=self._project_model.project_id,
+                title=title,
+                description=description,
+            )
         )
 
     def get_task(self, task_id: str) -> ProductTask:

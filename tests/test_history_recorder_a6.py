@@ -1,4 +1,5 @@
-﻿import unittest
+from dataclasses import replace
+import unittest
 
 from application.history import AgentHistoryStatus, AgentHistoryStore
 from application.history_recorder import AgentHistoryRecorder
@@ -84,6 +85,34 @@ class TestAgentHistoryRecorderA6(unittest.TestCase):
             AgentHistoryStatus.COMPLETED,
         )
         self.assertIs(store.get("history-1"), entry)
+
+    def test_rejects_run_with_mismatched_task_id(self):
+        execution = self._execution()
+        execution = replace(
+            execution,
+            run=replace(execution.run, task_id="different-task"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "same task_id"):
+            AgentHistoryRecorder().record_execution(
+                execution,
+                self._verification(),
+                history_id="history-mismatch-task",
+            )
+
+    def test_rejects_result_with_mismatched_run_id(self):
+        execution = self._execution()
+        execution = replace(
+            execution,
+            result=replace(execution.result, run_id="different-run"),
+        )
+
+        with self.assertRaisesRegex(ValueError, "same run_id"):
+            AgentHistoryRecorder().record_execution(
+                execution,
+                self._verification(),
+                history_id="history-mismatch-result",
+            )
 
     def test_rejects_mismatched_execution_and_verification(self):
         recorder = AgentHistoryRecorder()

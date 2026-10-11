@@ -84,7 +84,7 @@ class AgentWorkflowTests(unittest.TestCase):
 
         self.assertEqual(result.status, WorkflowStatus.FAILED)
         self.assertFalse(result.success)
-        self.assertEqual(result.result, "RuntimeError")
+        self.assertEqual(result.result, "RuntimeError: controlled failure")
         self.assertFalse(self.workflow.history_store.read_history()[0].success)
 
     def test_snapshot_operations_delegate_explicitly(self) -> None:

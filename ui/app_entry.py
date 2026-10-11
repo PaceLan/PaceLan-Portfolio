@@ -64,6 +64,11 @@ def create_app(
             if runtime is not None
             else None
         ),
+        autonomous_execution_service=(
+            runtime.autonomous_execution_service
+            if runtime is not None
+            else None
+        ),
     )
 
 

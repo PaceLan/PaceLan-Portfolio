@@ -112,7 +112,7 @@ class AgentWorkflow:
             result = WorkflowStepResult(
                 operation,
                 WorkflowStatus.FAILED,
-                type(error).__name__,
+                f"{type(error).__name__}: {error}",
                 False,
             )
             self._record_history(operation, target, result.result, False)

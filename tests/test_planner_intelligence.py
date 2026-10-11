@@ -275,6 +275,23 @@ class PlannerIntelligenceTests(unittest.TestCase):
                 "inspect",
             )
 
+    def test_missing_targets_are_rejected(self):
+        task = WorkflowTask(
+            task_id="task-no-target",
+            project_id="project-001",
+            description="review the project",
+        )
+        empty_context = ContextUnderstandingResult(
+            task=task,
+            relevant_files=(),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "no relevant or explicit file targets",
+        ):
+            self.planner.plan(task, empty_context)
+
     def test_plan_is_deterministic(self):
         first = self.planner.plan(
             self.task,

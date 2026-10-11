@@ -46,6 +46,7 @@ class CodingAssistantApp:
         composition: Optional[UXComposition] = None,
         agent_service=None,
         execution_service=None,
+        autonomous_execution_service=None,
         runtime_root: Optional[Union[str, Path]] = None,
         accessibility: Optional[AnimationAccessibility] = None,
     ) -> None:
@@ -53,6 +54,7 @@ class CodingAssistantApp:
         self.controller = controller or ApplicationController(
             agent_service=agent_service,
             execution_service=execution_service,
+            autonomous_execution_service=autonomous_execution_service,
         )
         self.composition = composition or DEFAULT_UX_COMPOSITION
         self.accessibility = accessibility or AnimationAccessibility()
@@ -459,6 +461,7 @@ def create_app(
     controller: Optional[ApplicationController] = None,
     agent_service=None,
     execution_service=None,
+    autonomous_execution_service=None,
 ) -> CodingAssistantApp:
     return CodingAssistantApp(
         root,
@@ -466,6 +469,7 @@ def create_app(
         project_root=project_root,
         agent_service=agent_service,
         execution_service=execution_service,
+        autonomous_execution_service=autonomous_execution_service,
     )
 
 

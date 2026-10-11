@@ -24,6 +24,7 @@ class WorkflowStep:
     target: str = "."
     context: str | None = None
     step_id: str = ""
+    terminal_command: str | None = None
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,7 @@ def run_plan(
             result = WorkflowStepResult(
                 step.operation,
                 WorkflowStatus.FAILED,
-                type(error).__name__,
+                f"{type(error).__name__}: {error}",
                 False,
             )
             tracker.fail_step(step.step_id)

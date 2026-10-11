@@ -185,6 +185,65 @@ class ApplicationErrorResultPropagationM1855Tests(unittest.TestCase):
             self.assertNotIsInstance(value, Result)
 
     # ------------------------------------------------------------------
+    def test_failure_diagnostic_preserves_actual_step_details(self):
+        failed = WorkflowStepResult(
+            operation="modify",
+            status=WorkflowStatus.FAILED,
+            result="RuntimeError: controlled failure",
+            success=False,
+        )
+        workflow_result = WorkflowResult.from_step_results(
+            (failed,),
+            run_id="run-diagnostic-001",
+        )
+
+        diagnostic = ResultService.first_unsuccessful_step_diagnostic(workflow_result)
+
+        self.assertEqual(diagnostic["step_index"], 0)
+        self.assertEqual(diagnostic["operation"], "modify")
+        self.assertEqual(diagnostic["status"], "FAILED")
+        self.assertEqual(
+            diagnostic["result"],
+            "RuntimeError: controlled failure",
+        )
+        self.assertFalse(diagnostic["success"])
+
+    def test_successful_workflow_has_no_failure_diagnostic(self):
+        successful = WorkflowStepResult(
+            operation="inspect",
+            status=WorkflowStatus.COMPLETED,
+            result="completed",
+            success=True,
+        )
+        workflow_result = WorkflowResult.from_step_results(
+            (successful,),
+            run_id="run-diagnostic-002",
+        )
+
+        self.assertIsNone(
+            ResultService.first_unsuccessful_step_diagnostic(workflow_result)
+        )
+
+    def test_blocked_step_is_reported_as_blocked(self):
+        blocked = WorkflowStepResult(
+            operation="execute",
+            status=WorkflowStatus.BLOCKED,
+            result="Permission boundary",
+            success=False,
+        )
+        workflow_result = WorkflowResult.from_step_results(
+            (blocked,),
+            run_id="run-diagnostic-blocked",
+        )
+
+        diagnostic = ResultService.first_unsuccessful_step_diagnostic(
+            workflow_result
+        )
+
+        self.assertEqual(diagnostic["status"], "BLOCKED")
+        self.assertEqual(diagnostic["result"], "Permission boundary")
+        self.assertFalse(diagnostic["success"])
+
     # Invalid inputs
     # ------------------------------------------------------------------
 

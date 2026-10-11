@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Event, RLock
+from collections.abc import Callable
 
 from agent_workflow.agent_project_planner import AgentProjectPlanner
 from agent_workflow.agent_service import AgentService
@@ -198,17 +199,23 @@ class PlanningService:
         task: TaskModel,
         steps: Iterable[WorkflowStep] = (),
     ) -> PlanModel:
+        workflow_plan = self.build_workflow_plan(task, steps)
+        return self._to_model(workflow_plan)
+
+    def build_workflow_plan(
+        self,
+        task: TaskModel,
+        steps: Iterable[WorkflowStep] = (),
+    ):
         if not isinstance(task, TaskModel):
             raise TypeError("task must be a TaskModel")
 
         workflow_task = TaskService.to_workflow(task)
 
-        workflow_plan = self._planner.build(
+        return self._planner.build(
             workflow_task,
             steps,
         )
-
-        return self._to_model(workflow_plan)
 
     def plan_from_context(
         self,
@@ -397,6 +404,32 @@ class ResultService:
         )
 
 
+    @staticmethod
+    def first_unsuccessful_step_diagnostic(
+        result: WorkflowResult,
+    ) -> dict[str, object] | None:
+        """Return the first unsuccessful step, including FAILED or BLOCKED."""
+        if not isinstance(result, WorkflowResult):
+            raise TypeError("result must be a WorkflowResult")
+
+        step = result.failed_step
+        if step is None:
+            return None
+
+        status = (
+            step.status.value
+            if hasattr(step.status, "value")
+            else str(step.status)
+        )
+        return {
+            "step_index": result.failure_index,
+            "operation": step.operation,
+            "status": status,
+            "result": step.result,
+            "success": step.success,
+        }
+
+
 class SnapshotService:
     """Application boundary for immutable execution snapshots."""
 
@@ -445,12 +478,16 @@ class ApplicationExecutionService:
         project_path: str | Path | None = None,
         history_recorder: AgentHistoryRecorder | None = None,
         runtime_authority: RuntimeAuthority | None = None,
+        terminal_command_executor: Callable[[str], str] | None = None,
     ) -> None:
         if not isinstance(agent_service, AgentService):
             raise TypeError(
                 "agent_service must be an AgentService"
             )
 
+        if terminal_command_executor is not None and not callable(terminal_command_executor):
+            raise TypeError("terminal_command_executor must be callable or None")
+        self._terminal_command_executor = terminal_command_executor
         self._agent_service = agent_service
         self._project_path = (
             Path(project_path).resolve()
@@ -569,6 +606,10 @@ class ApplicationExecutionService:
             self._resume_gate.wait()
             if self._terminate_requested.is_set():
                 raise RuntimeError("agent execution was stopped")
+            if step.terminal_command is not None:
+                if self._terminal_command_executor is None:
+                    raise RuntimeError("explicit terminal command has no terminal executor")
+                return self._terminal_command_executor(step.terminal_command)
             return step.action()
 
         return WorkflowStep(
@@ -579,6 +620,7 @@ class ApplicationExecutionService:
             target=step.target,
             context=step.context,
             step_id=step.step_id,
+            terminal_command=step.terminal_command,
         )
 
     def run(

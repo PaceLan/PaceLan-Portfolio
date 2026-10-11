@@ -87,6 +87,7 @@ class ContextUnderstanding:
     def understand(
         self,
         task: WorkflowTask,
+        fallback_to_first_file: bool = False,
     ) -> ContextUnderstandingResult:
         """Build deterministic task context without project mutation."""
         if not isinstance(task, WorkflowTask):
@@ -97,6 +98,20 @@ class ContextUnderstanding:
         relevant_files = self._select_relevant_files(
             task_context
         )
+        if fallback_to_first_file and not relevant_files:
+            scanned = self.project_interface.context.scan_result.files
+            key = lambda path: str(path).replace(chr(92), "/")
+            python_files = sorted(
+                (item.relative_path for item in scanned
+                 if str(item.relative_path).lower().endswith(".py")),
+                key=key,
+            )
+            all_files = sorted(
+                (item.relative_path for item in scanned), key=key
+            )
+            candidates = python_files or all_files
+            if candidates:
+                relevant_files = (candidates[0],)
 
         relevant_symbols = self._select_relevant_symbols(
             relevant_files

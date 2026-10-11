@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
-from application.models import TaskModel
+from application.models import PlanModel, TaskModel
 from application.multi_project_workspace import MultiProjectWorkspaceService
 from application.services import ApplicationExecutionService
 from application.workspace import (
@@ -54,6 +54,7 @@ class ApplicationController:
         workspace: Optional[ProjectWorkspaceService] = None,
         agent_service=None,
         execution_service=None,
+        autonomous_execution_service=None,
     ) -> None:
         base_workspace = workspace or ProjectWorkspaceService(
             project_manager=project_manager,
@@ -75,6 +76,7 @@ class ApplicationController:
                 else None
             )
         )
+        self.autonomous_execution_service = autonomous_execution_service
         self.agent_state = AgentInteractionState()
         self._agent_history = ()
 
@@ -243,6 +245,41 @@ class ApplicationController:
             application_task,
             steps,
         )
+
+    def run_autonomous_task(
+        self,
+        task,
+        plan: PlanModel,
+    ) -> AgentInteractionState:
+        if self.autonomous_execution_service is None:
+            raise RuntimeError(
+                "AutonomousExecutionService is not configured"
+            )
+
+        execution = self.autonomous_execution_service.run(task, plan)
+        entry = AgentUIAdapter.history_entry(execution)
+
+        self._agent_history = (
+            *self._agent_history,
+            entry,
+        )
+        self.agent_state = AgentUIAdapter.from_execution(execution)
+        self.agent_state = self._with_history(
+            self.agent_state,
+            selected_run_id=entry.run_id,
+        )
+        return self.agent_state
+
+    def start_autonomous_task(
+        self,
+        task,
+        plan: PlanModel,
+    ):
+        if self.autonomous_execution_service is None:
+            raise RuntimeError(
+                "AutonomousExecutionService is not configured"
+            )
+        return self.autonomous_execution_service.start(task, plan)
 
     def pause_agent(self):
         if self.application_execution_service is None:

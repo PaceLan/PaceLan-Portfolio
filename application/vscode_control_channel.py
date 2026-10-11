@@ -14,6 +14,10 @@ class TerminalControlResult:
     session_id: str | None
     state: str
     output: str = ""
+    output_status: str = "UNKNOWN"
+    command_id: str | None = None
+    command_status: str = "UNKNOWN"
+    exit_code: int | None = None
 
 
 class VSCodeControlChannel:
@@ -58,6 +62,10 @@ class VSCodeControlChannel:
             session_id=result.get("session_id"),
             state=result.get("state", "UNKNOWN"),
             output=result.get("output", ""),
+            output_status=result.get("output_status", "UNKNOWN"),
+            command_id=result.get("command_id"),
+            command_status=result.get("command_status", "UNKNOWN"),
+            exit_code=result.get("exit_code"),
         )
 
     def create(
@@ -101,12 +109,15 @@ class VSCodeControlChannel:
         self,
         terminal_id: str | None = None,
         session_id: str | None = None,
+        command_id: str | None = None,
     ) -> TerminalControlResult:
-        return self._request(
-            "status",
-            terminal_id=terminal_id,
-            session_id=session_id,
-        )
+        payload = {
+            "terminal_id": terminal_id,
+            "session_id": session_id,
+        }
+        if command_id is not None:
+            payload["command_id"] = command_id
+        return self._request("status", **payload)
 
 
 __all__ = [

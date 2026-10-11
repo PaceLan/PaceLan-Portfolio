@@ -63,6 +63,16 @@ class AgentHistoryRecorder:
         if not isinstance(verification, VerificationResult):
             raise TypeError("verification must be a VerificationResult")
 
+        if execution.run.task_id != execution.task.task_id:
+            raise ValueError(
+                "execution run and task must reference the same task_id"
+            )
+
+        if execution.result.run_id != execution.run.run_id:
+            raise ValueError(
+                "execution result and run must reference the same run_id"
+            )
+
         if execution.run.run_id != verification.run_id:
             raise ValueError(
                 "execution and verification must reference the same run_id"

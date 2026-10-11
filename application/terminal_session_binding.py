@@ -24,6 +24,11 @@ _REMOTE_STATES = {
 class TerminalSessionBinding:
     session: TerminalSession
     terminal_id: str
+    command_id: str | None = None
+    command_status: str = "UNKNOWN"
+    exit_code: int | None = None
+    output: str = ""
+    output_status: str = "UNKNOWN"
 
     def __post_init__(self) -> None:
         if not isinstance(self.terminal_id, str) or not self.terminal_id:
@@ -67,13 +72,30 @@ class TerminalSessionBinding:
         if result.terminal_id != self.terminal_id:
             raise ValueError("terminal_id does not match binding")
 
-        return replace(
-            self,
-            session=replace(
+        updates = {
+            "session": replace(
                 self.session,
                 state=_state_from_remote(result.state),
-            ),
-        )
+            )
+        }
+        if result.operation == "send" or result.command_id is not None:
+            updates.update(
+                command_id=result.command_id,
+                command_status=result.command_status,
+                exit_code=result.exit_code,
+            )
+            same_command = self.command_id == result.command_id
+            preserve_captured = (
+                same_command
+                and self.output_status == "CAPTURED"
+                and result.output_status != "CAPTURED"
+            )
+            if not preserve_captured:
+                updates.update(
+                    output=result.output,
+                    output_status=result.output_status,
+                )
+        return replace(self, **updates)
 
     def send(
         self,
@@ -90,11 +112,17 @@ class TerminalSessionBinding:
     def status(
         self,
         channel: VSCodeControlChannel,
+        command_id: str | None = None,
     ) -> "TerminalSessionBinding":
-        result = channel.status(
-            terminal_id=self.terminal_id,
-            session_id=self.session_id,
-        )
+        kwargs = {
+            "terminal_id": self.terminal_id,
+            "session_id": self.session_id,
+        }
+        if command_id is not None:
+            kwargs["command_id"] = command_id
+        result = channel.status(**kwargs)
+        if command_id is not None and result.command_id != command_id:
+            raise ValueError("command_id does not match requested command")
         return self.apply_result(result)
 
     def close(
